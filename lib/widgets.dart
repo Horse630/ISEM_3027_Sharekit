@@ -1,0 +1,143 @@
+import 'package:flutter/material.dart';
+
+import 'models.dart';
+
+class ItemMark extends StatelessWidget {
+  const ItemMark({super.key, required this.item, this.size = 64});
+
+  final ShareItem item;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: item.category.color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(size * 0.28),
+      ),
+      child: Icon(
+        item.category.icon,
+        color: item.category.color,
+        size: size * 0.42,
+      ),
+    );
+  }
+}
+
+class PriceChip extends StatelessWidget {
+  const PriceChip({super.key, required this.item});
+
+  final ShareItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final free = item.isFree;
+    final color = free ? const Color(0xFF0E6B52) : const Color(0xFF8C6239);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        item.priceLabel,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+class StageTrack extends StatelessWidget {
+  const StageTrack({super.key, required this.stage});
+
+  final BookingStage stage;
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['預約', '取件', '歸還', '評價'];
+    final active = stage.index;
+    return Row(
+      children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          _Node(label: labels[i], done: i <= active, current: i == active),
+          if (i != labels.length - 1)
+            Expanded(
+              child: Container(
+                height: 2,
+                margin: const EdgeInsets.only(bottom: 18),
+                color: i < active
+                    ? const Color(0xFF0E6B52)
+                    : const Color(0xFFD9D3C8),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Node extends StatelessWidget {
+  const _Node({required this.label, required this.done, required this.current});
+
+  final String label;
+  final bool done;
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = done ? const Color(0xFF0E6B52) : const Color(0xFFB7AFA3);
+    return Column(
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: done ? color : Colors.transparent,
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: current ? 2 : 1.4),
+          ),
+          child: done
+              ? const Icon(Icons.check, size: 14, color: Colors.white)
+              : null,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class InfoLine extends StatelessWidget {
+  const InfoLine({super.key, required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF5E6A64)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: const TextStyle(height: 1.35))),
+        ],
+      ),
+    );
+  }
+}
