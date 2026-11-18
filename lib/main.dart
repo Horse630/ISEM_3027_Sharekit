@@ -44,7 +44,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
     try {
       await _auth.open();
       final local = LocalCatalog(_auth.database, seed: seedItems);
-      final remote = kIsWeb ? await RemoteCatalog.connect() : null;
+      final remote = kIsWeb ? await PublicCatalog.connect() : null;
       await widget.store.attach(CombinedCatalog(local: local, remote: remote));
       final user = await _auth.currentUser();
       if (!mounted) return;

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 import 'package:sqflite/sqflite.dart';
 
 import 'models.dart';
@@ -117,11 +118,62 @@ class RemoteCatalog implements CatalogGateway {
   }
 }
 
+class PublicCatalog implements CatalogGateway {
+  static const documentUrl =
+      'https://crudcrud.com/api/ca79774c90ee43e8bd32fdd71190db70/catalog/6afdf9211dded903e8a5c46f';
+
+  static Future<PublicCatalog?> connect() async {
+    try {
+      final response = await http
+          .get(Uri.parse(documentUrl))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return null;
+      return PublicCatalog();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<CatalogSnapshot> load() async {
+    final response = await http
+        .get(Uri.parse(documentUrl))
+        .timeout(const Duration(seconds: 8));
+    if (response.statusCode != 200) {
+      throw StateError('共用資料庫讀取失敗');
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    json.remove('_id');
+    return snapshotFromJson(json);
+  }
+
+  @override
+  Future<void> save(CatalogSnapshot snapshot) async {
+    var response = await _put(_shrinkSnapshot(snapshot));
+    if (response.statusCode == 413) {
+      response = await _put(_withoutPhotos(snapshot));
+    }
+    if (response.statusCode != 200) {
+      throw StateError('共用資料庫寫入失敗');
+    }
+  }
+
+  Future<http.Response> _put(CatalogSnapshot snapshot) {
+    return http
+        .put(
+          Uri.parse(documentUrl),
+          headers: const {'Content-Type': 'application/json'},
+          body: jsonEncode(snapshotToJson(snapshot)),
+        )
+        .timeout(const Duration(seconds: 12));
+  }
+}
+
 class CombinedCatalog implements CatalogGateway {
   CombinedCatalog({required this.local, this.remote});
 
   final LocalCatalog local;
-  final RemoteCatalog? remote;
+  final CatalogGateway? remote;
 
   @override
   Future<CatalogSnapshot> load() async {
@@ -274,6 +326,55 @@ Uint8List? _bytes(Object? value) {
   if (value is String && value.isEmpty) return null;
   if (value is String) return base64Decode(value);
   return null;
+}
+
+CatalogSnapshot _shrinkSnapshot(CatalogSnapshot snapshot) {
+  return CatalogSnapshot(
+    items: [
+      for (final item in snapshot.items)
+        _withPhoto(item, _shrinkPhoto(item.photoBytes)),
+    ],
+    bookings: snapshot.bookings,
+    sequence: snapshot.sequence,
+  );
+}
+
+CatalogSnapshot _withoutPhotos(CatalogSnapshot snapshot) {
+  return CatalogSnapshot(
+    items: [for (final item in snapshot.items) _withPhoto(item, null)],
+    bookings: snapshot.bookings,
+    sequence: snapshot.sequence,
+  );
+}
+
+ShareItem _withPhoto(ShareItem item, Uint8List? photo) {
+  return ShareItem(
+    id: item.id,
+    name: item.name,
+    owner: item.owner,
+    category: item.category,
+    condition: item.condition,
+    distanceMeters: item.distanceMeters,
+    summary: item.summary,
+    rating: item.rating,
+    reviewCount: item.reviewCount,
+    handovers: item.handovers,
+    dailyPrice: item.dailyPrice,
+    photoBytes: photo,
+    address: item.address,
+    handover: item.handover,
+  );
+}
+
+Uint8List? _shrinkPhoto(Uint8List? bytes) {
+  if (bytes == null || bytes.length < 80000) return bytes;
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return bytes.length > 300000 ? null : bytes;
+  final resized = decoded.width > 480
+      ? img.copyResize(decoded, width: 480)
+      : decoded;
+  final jpg = Uint8List.fromList(img.encodeJpg(resized, quality: 42));
+  return jpg.length < bytes.length ? jpg : bytes;
 }
 
 String _date(DateTime value) {

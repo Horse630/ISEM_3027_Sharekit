@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -17,11 +18,13 @@ class ShareStore extends ChangeNotifier {
   int _sequence = 240;
   int? requestedTab;
   CatalogGateway? _gateway;
+  Timer? _syncTimer;
   Future<void> _writes = Future<void>.value();
 
   Future<void> get persisted => _writes;
 
   Future<void> attach(CatalogGateway gateway) async {
+    _syncTimer?.cancel();
     _gateway = gateway;
     final snapshot = await gateway.load();
     _items = List<ShareItem>.of(snapshot.items);
@@ -30,6 +33,43 @@ class ShareStore extends ChangeNotifier {
       ..addAll(snapshot.bookings);
     _sequence = snapshot.sequence;
     notifyListeners();
+    if (gateway is CombinedCatalog && gateway.remote is PublicCatalog) {
+      _syncTimer = Timer.periodic(const Duration(seconds: 6), (_) {
+        _pullPublic();
+      });
+    }
+  }
+
+  Future<void> _pullPublic() async {
+    final gateway = _gateway;
+    if (gateway is! CombinedCatalog || gateway.remote is! PublicCatalog) return;
+    try {
+      final remoteSnapshot = await gateway.remote!.load();
+      final merged = mergeCatalogs(
+        remoteSnapshot,
+        CatalogSnapshot(
+          items: _items,
+          bookings: _bookings,
+          sequence: _sequence,
+        ),
+      );
+      if (_sameItems(merged)) return;
+      _items = List<ShareItem>.of(merged.items);
+      _bookings
+        ..clear()
+        ..addAll(merged.bookings);
+      _sequence = merged.sequence;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  bool _sameItems(CatalogSnapshot snapshot) {
+    if (snapshot.items.length != _items.length) return false;
+    if (snapshot.bookings.length != _bookings.length) return false;
+    for (var index = 0; index < snapshot.items.length; index++) {
+      if (snapshot.items[index].id != _items[index].id) return false;
+    }
+    return snapshot.sequence == _sequence;
   }
 
   List<ShareItem> get items => List.unmodifiable(_items);

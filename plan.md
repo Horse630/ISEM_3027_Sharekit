@@ -31,8 +31,8 @@
    - 網站用 `sqflite_common_ffi_web`，需要 `web/sqlite3.wasm` 和 `web/sqflite_sw.js`。Android 用 sqflite 外掛。同一份登入程式兩邊都能跑。
 8. 2026-11-19 把物品和預約寫進資料庫：
    - 名稱、物主、分類、狀況、地址、交接方式、租金、評價、相片和預約都寫進 `items`、`bookings`。同一個瀏覽器重新開啟仍然在。
-   - 每個瀏覽器的 SQLite 存在自己的 IndexedDB，Firefox 讀不到 Edge 的檔案。網站會再連本機共用資料庫 `http://127.0.0.1:8780`，檔案是專案裡的 `sharekit_catalog.db`。
-   - 先執行 `python tool/catalog_server.py`，再用 Firefox 和 Edge 打開同一個本機網站。兩邊看到的是同一份物品。
+   - 每個瀏覽器的 SQLite 存在自己的 IndexedDB，Firefox 讀不到 Edge 的檔案。GitHub Pages 也連不到 `127.0.0.1`。
+   - 網站改為讀寫公開的 HTTPS 物品庫。不同瀏覽器、不同帳號看到同一份物品。本機 `python tool/catalog_server.py` 只給本機測試用。
 
 ## 網址
 
