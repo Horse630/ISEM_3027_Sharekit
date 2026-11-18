@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'booking_pages.dart';
+import 'camera_capture.dart';
+import 'chat_page.dart';
 import 'main.dart';
 import 'models.dart';
 import 'widgets.dart';
@@ -22,18 +26,28 @@ class ItemDetailPage extends StatelessWidget {
         children: [
           Hero(
             tag: item.id,
-            child: Container(
-              height: 180,
-              decoration: BoxDecoration(
-                color: item.category.color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Icon(
-                item.category.icon,
-                size: 72,
-                color: item.category.color,
-              ),
-            ),
+            child: item.photoBytes == null
+                ? Container(
+                    height: 180,
+                    decoration: BoxDecoration(
+                      color: item.category.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Icon(
+                      item.category.icon,
+                      size: 72,
+                      color: item.category.color,
+                    ),
+                  )
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Image.memory(
+                      item.photoBytes!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -48,6 +62,7 @@ class ItemDetailPage extends StatelessWidget {
               PriceChip(item: item),
               _Meta(text: item.category.label),
               _Meta(text: item.condition),
+              _Meta(text: item.handover.label),
             ],
           ),
           const SizedBox(height: 16),
@@ -58,8 +73,11 @@ class ItemDetailPage extends StatelessWidget {
           const SizedBox(height: 16),
           InfoLine(
             icon: Icons.place_outlined,
-            text:
-                '${ShareKitScope.communityName} · ${formatDistance(item.distanceMeters)}',
+            text: '${item.address} · ${formatDistance(item.distanceMeters)}',
+          ),
+          InfoLine(
+            icon: Icons.local_shipping_outlined,
+            text: '交接方式：${item.handover.label}',
           ),
           InfoLine(
             icon: Icons.person_outline,
@@ -84,13 +102,39 @@ class ItemDetailPage extends StatelessWidget {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: FilledButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => BookPage(itemId: item.id)),
-              );
-            },
-            child: const Text('預約這件物品'),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    final account = AccountScope.of(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChatPage(
+                          auth: account.auth,
+                          itemId: item.id,
+                          itemName: item.name,
+                          ownerName: item.owner,
+                          senderName: account.user.label,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('聯絡物主'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => BookPage(itemId: item.id)),
+                    );
+                  },
+                  child: const Text('預約這件物品'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -339,7 +383,9 @@ class _FeeRow extends StatelessWidget {
 }
 
 class ListItemPage extends StatefulWidget {
-  const ListItemPage({super.key});
+  const ListItemPage({super.key, required this.ownerName});
+
+  final String ownerName;
 
   @override
   State<ListItemPage> createState() => _ListItemPageState();
@@ -349,8 +395,11 @@ class _ListItemPageState extends State<ListItemPage> {
   final _name = TextEditingController();
   final _summary = TextEditingController();
   final _price = TextEditingController();
+  final _address = TextEditingController();
   ItemCategory _category = ItemCategory.tool;
   String _condition = '良好';
+  HandoverMethod _handover = HandoverMethod.faceToFace;
+  Uint8List? _photo;
   String? _error;
 
   @override
@@ -358,14 +407,21 @@ class _ListItemPageState extends State<ListItemPage> {
     _name.dispose();
     _summary.dispose();
     _price.dispose();
+    _address.dispose();
     super.dispose();
   }
 
   void _publish() {
     final name = _name.text.trim();
     final summary = _summary.text.trim();
-    if (name.isEmpty || summary.isEmpty) {
-      setState(() => _error = '請填寫名稱和簡介。');
+    final address = _address.text.trim();
+    if (name.isEmpty || summary.isEmpty || address.isEmpty) {
+      setState(() => _error = '請填寫名稱、地址和簡介。');
+      return;
+    }
+    final photo = _photo;
+    if (photo == null) {
+      setState(() => _error = '請用相機拍攝物品現況。不能從相簿上載。');
       return;
     }
     double? dailyPrice;
@@ -379,10 +435,14 @@ class _ListItemPageState extends State<ListItemPage> {
     }
     ShareKitScope.of(context).addItem(
       name: name,
+      owner: widget.ownerName,
       category: _category,
       condition: _condition,
       summary: summary,
       dailyPrice: dailyPrice,
+      photoBytes: photo,
+      address: address,
+      handover: _handover,
     );
     ShareKitScope.of(context).openTab(0);
     ScaffoldMessenger.of(context)
@@ -396,7 +456,34 @@ class _ListItemPageState extends State<ListItemPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
-          const Text('把家裡不常用的東西借給同一個社區。留空租金即為免費借用。'),
+          const Text('把家裡不常用的東西借給同一個社區。留空租金即為免費借用。上架必須用相機拍攝當時的物品狀況，不能從相簿上載。'),
+          const SizedBox(height: 16),
+          if (_photo != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.memory(
+                _photo!,
+                height: 180,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () async {
+              final bytes = await Navigator.of(context).push<Uint8List>(
+                MaterialPageRoute(
+                  builder: (_) => const CameraCapturePage(title: '拍攝物品現況'),
+                ),
+              );
+              if (!mounted || bytes == null) return;
+              setState(() {
+                _photo = bytes;
+                _error = null;
+              });
+            },
+            child: Text(_photo == null ? '用相機拍攝' : '重新拍攝'),
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: _name,
@@ -438,6 +525,28 @@ class _ListItemPageState extends State<ListItemPage> {
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
             decoration: const InputDecoration(labelText: '每日租金（港元，可留空）'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _address,
+            decoration: const InputDecoration(
+              labelText: '你的地址',
+              hintText: '例如：九龍塘XX座X樓',
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text('交接方式', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final method in HandoverMethod.values)
+                ChoiceChip(
+                  label: Text(method.label),
+                  selected: _handover == method,
+                  onSelected: (_) => setState(() => _handover = method),
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           TextField(

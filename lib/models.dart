@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 enum ItemCategory { tool, home, outdoor, event }
@@ -27,6 +29,26 @@ extension ItemCategoryX on ItemCategory {
 
 enum BookingStage { reserved, pickedUp, returned, reviewed }
 
+enum HandoverMethod { faceToFace, mail }
+
+extension HandoverMethodX on HandoverMethod {
+  String get label => switch (this) {
+    HandoverMethod.faceToFace => '當面交接',
+    HandoverMethod.mail => '郵寄',
+  };
+}
+
+enum DepositStatus { none, pending, paid, refunded }
+
+extension DepositStatusX on DepositStatus {
+  String get label => switch (this) {
+    DepositStatus.none => '無需按金',
+    DepositStatus.pending => '按金待付',
+    DepositStatus.paid => '按金已付',
+    DepositStatus.refunded => '按金已退',
+  };
+}
+
 extension BookingStageX on BookingStage {
   String get label => switch (this) {
     BookingStage.reserved => '待取件',
@@ -52,6 +74,9 @@ class ShareItem {
     required this.reviewCount,
     required this.handovers,
     this.dailyPrice,
+    this.photoBytes,
+    this.address = '九龍塘示範屋苑',
+    this.handover = HandoverMethod.faceToFace,
   });
 
   final String id;
@@ -65,6 +90,9 @@ class ShareItem {
   final int reviewCount;
   final int handovers;
   final double? dailyPrice;
+  final Uint8List? photoBytes;
+  final String address;
+  final HandoverMethod handover;
 
   bool get isFree => dailyPrice == null || dailyPrice == 0;
 
@@ -83,6 +111,9 @@ class ShareItem {
       reviewCount: reviewCount ?? this.reviewCount,
       handovers: handovers ?? this.handovers,
       dailyPrice: dailyPrice,
+      photoBytes: photoBytes,
+      address: address,
+      handover: handover,
     );
   }
 }
@@ -96,9 +127,11 @@ class Booking {
     required this.stage,
     required this.pickupCode,
     required this.note,
+    this.deposit = DepositStatus.none,
     this.returnCondition,
     this.stars,
     this.comment,
+    this.issue,
   });
 
   final String id;
@@ -108,17 +141,21 @@ class Booking {
   final BookingStage stage;
   final String pickupCode;
   final String note;
+  final DepositStatus deposit;
   final String? returnCondition;
   final int? stars;
   final String? comment;
+  final String? issue;
 
   int get days => end.difference(start).inDays + 1;
 
   Booking copyWith({
     BookingStage? stage,
+    DepositStatus? deposit,
     String? returnCondition,
     int? stars,
     String? comment,
+    String? issue,
   }) {
     return Booking(
       id: id,
@@ -128,9 +165,11 @@ class Booking {
       stage: stage ?? this.stage,
       pickupCode: pickupCode,
       note: note,
+      deposit: deposit ?? this.deposit,
       returnCondition: returnCondition ?? this.returnCondition,
       stars: stars ?? this.stars,
       comment: comment ?? this.comment,
+      issue: issue ?? this.issue,
     );
   }
 }

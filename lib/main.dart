@@ -1,25 +1,101 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import 'account_page.dart';
+import 'auth_repository.dart';
 import 'booking_pages.dart';
+import 'catalog_gateway.dart';
 import 'explore_page.dart';
 import 'item_pages.dart';
+import 'login_page.dart';
 import 'store.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(ShareKitApp(store: ShareStore()));
 }
 
-class ShareKitApp extends StatelessWidget {
-  const ShareKitApp({super.key, required this.store});
+class ShareKitApp extends StatefulWidget {
+  const ShareKitApp({super.key, required this.store, this.databasePath});
 
   final ShareStore store;
+  final String? databasePath;
+
+  @override
+  State<ShareKitApp> createState() => _ShareKitAppState();
+}
+
+class _ShareKitAppState extends State<ShareKitApp> {
+  late final AuthRepository _auth = AuthRepository(
+    databasePath: widget.databasePath,
+  );
+  AppUser? _user;
+  Object? _error;
+  var _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _openSession();
+  }
+
+  Future<void> _openSession() async {
+    try {
+      await _auth.open();
+      final local = LocalCatalog(_auth.database, seed: seedItems);
+      final remote = kIsWeb ? await RemoteCatalog.connect() : null;
+      await widget.store.attach(CombinedCatalog(local: local, remote: remote));
+      final user = await _auth.currentUser();
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _logout() async {
+    await _auth.logout();
+    if (!mounted) return;
+    setState(() => _user = null);
+  }
+
+  @override
+  void dispose() {
+    _auth.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ShareKitScope(
-      store: store,
-      child: MaterialApp(
+    final Widget home;
+    if (_loading) {
+      home = const Scaffold(body: Center(child: Text('正在開啟資料庫…')));
+    } else if (_error != null) {
+      home = Scaffold(body: Center(child: Text('資料庫打不開：$_error')));
+    } else if (_user == null) {
+      home = LoginPage(
+        auth: _auth,
+        onLoggedIn: (next) => setState(() => _user = next),
+      );
+    } else {
+      home = HomeShell(
+        store: widget.store,
+        user: _user!,
+        auth: _auth,
+        onUserChanged: (next) => setState(() => _user = next),
+        onLogout: _logout,
+      );
+    }
+
+    final app = MaterialApp(
         title: 'ShareKit',
         debugShowCheckedModeBanner: false,
         scrollBehavior: const ShareKitScrollBehavior(),
@@ -38,10 +114,35 @@ class ShareKitApp extends StatelessWidget {
             ),
           );
         },
-        home: HomeShell(store: store),
-      ),
-    );
+        home: home,
+      );
+    final signedIn = _user == null
+        ? app
+        : AccountScope(user: _user!, auth: _auth, child: app);
+    return ShareKitScope(store: widget.store, child: signedIn);
   }
+}
+
+class AccountScope extends InheritedWidget {
+  const AccountScope({
+    super.key,
+    required this.user,
+    required this.auth,
+    required super.child,
+  });
+
+  final AppUser user;
+  final AuthRepository auth;
+
+  static AccountScope of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<AccountScope>();
+    assert(scope != null, 'AccountScope 不在樹中');
+    return scope!;
+  }
+
+  @override
+  bool updateShouldNotify(AccountScope oldWidget) =>
+      oldWidget.user != user || oldWidget.auth != auth;
 }
 
 class ShareKitScope extends InheritedNotifier<ShareStore> {
@@ -61,9 +162,20 @@ class ShareKitScope extends InheritedNotifier<ShareStore> {
 }
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.store});
+  const HomeShell({
+    super.key,
+    required this.store,
+    required this.user,
+    required this.auth,
+    required this.onUserChanged,
+    required this.onLogout,
+  });
 
   final ShareStore store;
+  final AppUser user;
+  final AuthRepository auth;
+  final ValueChanged<AppUser> onUserChanged;
+  final Future<void> Function() onLogout;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -93,8 +205,27 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    const pages = [ExplorePage(), BookingsPage(), ListItemPage()];
+    final pages = [
+      const ExplorePage(),
+      const BookingsPage(),
+      ListItemPage(ownerName: widget.user.label),
+    ];
     final wide = MediaQuery.sizeOf(context).width >= 840;
+    final accountBar = _AccountBar(
+      userName: widget.user.label,
+      onLogout: widget.onLogout,
+      onOpenAccount: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AccountPage(
+              user: widget.user,
+              auth: widget.auth,
+              onChanged: widget.onUserChanged,
+            ),
+          ),
+        );
+      },
+    );
 
     if (wide) {
       return Scaffold(
@@ -124,14 +255,26 @@ class _HomeShellState extends State<HomeShell> {
               ],
             ),
             const VerticalDivider(width: 1, thickness: 1),
-            Expanded(child: IndexedStack(index: _index, children: pages)),
+            Expanded(
+              child: Column(
+                children: [
+                  accountBar,
+                  Expanded(child: IndexedStack(index: _index, children: pages)),
+                ],
+              ),
+            ),
           ],
         ),
       );
     }
 
     return Scaffold(
-      body: IndexedStack(index: _index, children: pages),
+      body: Column(
+        children: [
+          accountBar,
+          Expanded(child: IndexedStack(index: _index, children: pages)),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) => setState(() => _index = index),
@@ -152,6 +295,50 @@ class _HomeShellState extends State<HomeShell> {
             label: '上架',
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AccountBar extends StatelessWidget {
+  const _AccountBar({
+    required this.userName,
+    required this.onLogout,
+    required this.onOpenAccount,
+  });
+
+  final String userName;
+  final Future<void> Function() onLogout;
+  final VoidCallback onOpenAccount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.person_outline, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: onOpenAccount,
+                    child: Text(
+                      userName,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+              TextButton(onPressed: onLogout, child: const Text('登出')),
+            ],
+          ),
+        ),
       ),
     );
   }

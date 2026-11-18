@@ -1,10 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 
+import 'catalog_gateway.dart';
 import 'models.dart';
 
 class ShareStore extends ChangeNotifier {
   ShareStore() {
-    _items = List<ShareItem>.of(_seedItems());
+    _items = List<ShareItem>.of(seedItems());
   }
 
   static const community = '九龍塘示範屋苑';
@@ -13,6 +16,21 @@ class ShareStore extends ChangeNotifier {
   final List<Booking> _bookings = [];
   int _sequence = 240;
   int? requestedTab;
+  CatalogGateway? _gateway;
+  Future<void> _writes = Future<void>.value();
+
+  Future<void> get persisted => _writes;
+
+  Future<void> attach(CatalogGateway gateway) async {
+    _gateway = gateway;
+    final snapshot = await gateway.load();
+    _items = List<ShareItem>.of(snapshot.items);
+    _bookings
+      ..clear()
+      ..addAll(snapshot.bookings);
+    _sequence = snapshot.sequence;
+    notifyListeners();
+  }
 
   List<ShareItem> get items => List.unmodifiable(_items);
   List<Booking> get bookings => List.unmodifiable(_bookings.reversed);
@@ -63,6 +81,7 @@ class ShareStore extends ChangeNotifier {
     final to = dateOnly(end);
     if (to.isBefore(from) || !rangeAvailable(itemId, from, to)) return null;
     _sequence += 1;
+    final item = itemById(itemId);
     final booking = Booking(
       id: 'SK-$_sequence',
       itemId: itemId,
@@ -71,13 +90,37 @@ class ShareStore extends ChangeNotifier {
       stage: BookingStage.reserved,
       pickupCode: (_sequence * 37 % 9000 + 1000).toString(),
       note: note.trim().isEmpty ? '在屋苑會所大堂交接' : note.trim(),
+      deposit: item.isFree ? DepositStatus.none : DepositStatus.pending,
     );
     _bookings.add(booking);
     notifyListeners();
+    _persist();
     return booking;
   }
 
+  void payDeposit(String bookingId) {
+    final booking = bookingById(bookingId);
+    if (booking.deposit != DepositStatus.pending) return;
+    _update(bookingId, (current) => current.copyWith(deposit: DepositStatus.paid));
+  }
+
+  void refundDeposit(String bookingId) {
+    final booking = bookingById(bookingId);
+    if (booking.deposit != DepositStatus.paid) return;
+    _update(
+      bookingId,
+      (current) => current.copyWith(deposit: DepositStatus.refunded),
+    );
+  }
+
+  void reportIssue(String bookingId, String issue) {
+    final text = issue.trim();
+    if (text.isEmpty) return;
+    _update(bookingId, (current) => current.copyWith(issue: text));
+  }
+
   void markPickedUp(String bookingId) {
+    if (bookingById(bookingId).deposit == DepositStatus.pending) return;
     _update(
       bookingId,
       (booking) => booking.copyWith(stage: BookingStage.pickedUp),
@@ -115,14 +158,19 @@ class ShareStore extends ChangeNotifier {
       handovers: item.handovers + 1,
     );
     notifyListeners();
+    _persist();
   }
 
   void addItem({
     required String name,
+    required String owner,
     required ItemCategory category,
     required String condition,
     required String summary,
     required double? dailyPrice,
+    required Uint8List photoBytes,
+    required String address,
+    required HandoverMethod handover,
   }) {
     _sequence += 1;
     _items.insert(
@@ -130,7 +178,7 @@ class ShareStore extends ChangeNotifier {
       ShareItem(
         id: 'item-$_sequence',
         name: name.trim(),
-        owner: '我',
+        owner: owner,
         category: category,
         condition: condition,
         distanceMeters: 80,
@@ -139,9 +187,13 @@ class ShareStore extends ChangeNotifier {
         reviewCount: 0,
         handovers: 0,
         dailyPrice: dailyPrice,
+        photoBytes: photoBytes,
+        address: address.trim(),
+        handover: handover,
       ),
     );
     notifyListeners();
+    _persist();
   }
 
   void _update(String bookingId, Booking Function(Booking booking) transform) {
@@ -149,10 +201,24 @@ class ShareStore extends ChangeNotifier {
     if (index == -1) return;
     _bookings[index] = transform(_bookings[index]);
     notifyListeners();
+    _persist();
+  }
+
+  void _persist() {
+    final gateway = _gateway;
+    if (gateway == null) return;
+    final snapshot = CatalogSnapshot(
+      items: List<ShareItem>.of(_items),
+      bookings: List<Booking>.of(_bookings),
+      sequence: _sequence,
+    );
+    _writes = _writes
+        .catchError((Object _) {})
+        .then((_) => gateway.save(snapshot));
   }
 }
 
-List<ShareItem> _seedItems() {
+List<ShareItem> seedItems() {
   return const [
     ShareItem(
       id: 'drill',

@@ -23,6 +23,10 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 
+# Local SQLite databases
+*.db
+*.db-journal
+
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id

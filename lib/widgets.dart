@@ -17,11 +17,14 @@ class ItemMark extends StatelessWidget {
         color: item.category.color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(size * 0.28),
       ),
-      child: Icon(
-        item.category.icon,
-        color: item.category.color,
-        size: size * 0.42,
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: item.photoBytes == null
+          ? Icon(
+              item.category.icon,
+              color: item.category.color,
+              size: size * 0.42,
+            )
+          : Image.memory(item.photoBytes!, fit: BoxFit.cover),
     );
   }
 }
