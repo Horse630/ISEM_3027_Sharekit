@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'item_pages.dart';
 import 'main.dart';
 import 'models.dart';
+import 'text.dart';
 import 'widgets.dart';
 
 class ExplorePage extends StatefulWidget {
@@ -83,7 +84,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 ),
                 for (final category in ItemCategory.values)
                   _FilterChip(
-                    label: category.label,
+                    label: categoryLabel(context, category),
                     selected: _category == category,
                     onTap: () => setState(() => _category = category),
                   ),
@@ -122,11 +123,15 @@ class _ExplorePageState extends State<ExplorePage> {
                   setState(() => _district = picked.district);
                 },
                 icon: const Icon(Icons.map_outlined),
-                label: Text(_district?.label ?? '十八區'),
+                label: Text(
+                  _district == null
+                      ? tr(context, '十八區', '18 districts')
+                      : districtLabel(context, _district!),
+                ),
               ),
               for (final sort in ItemSort.values)
                 ChoiceChip(
-                  label: Text(sort.label),
+                  label: Text(sortLabel(context, sort)),
                   selected: _sort == sort,
                   onSelected: (_) => setState(() => _sort = sort),
                 ),

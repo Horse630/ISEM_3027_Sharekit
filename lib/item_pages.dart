@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 
 import 'booking_pages.dart';
 import 'camera_capture.dart';
+import 'chat_center.dart';
 import 'chat_page.dart';
 import 'main.dart';
 import 'models.dart';
+import 'text.dart';
 import 'widgets.dart';
 
 class ItemDetailPage extends StatelessWidget {
@@ -92,7 +94,13 @@ class ItemDetailPage extends StatelessWidget {
           ),
           InfoLine(
             icon: Icons.payments_outlined,
-            text: item.isFree ? '這件物品免費借用，平台不收費。' : '付費租借會另加租金一成，作為交接紀錄的服務費。',
+            text: item.isFree
+                ? tr(context, '這件物品免費借用，平台不收費。', 'Free to borrow. No platform fee.')
+                : tr(
+                    context,
+                    '租金由物主訂，平台不另收費。',
+                    'The owner sets the rent. The platform adds no fee.',
+                  ),
           ),
           const SizedBox(height: 8),
           const Text('借用流程', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -117,11 +125,12 @@ class ItemDetailPage extends StatelessWidget {
                           itemName: item.name,
                           ownerName: item.owner,
                           senderName: account.user.label,
+                          center: ChatScope.maybeOf(context),
                         ),
                       ),
                     );
                   },
-                  child: const Text('聯絡物主'),
+                  child: Text(tr(context, '聯絡物主', 'Message')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -132,7 +141,7 @@ class ItemDetailPage extends StatelessWidget {
                       MaterialPageRoute(builder: (_) => BookPage(itemId: item.id)),
                     );
                   },
-                  child: const Text('預約這件物品'),
+                  child: Text(tr(context, '預約這件物品', 'Book this item')),
                 ),
               ),
             ],
@@ -178,6 +187,7 @@ class _BookPageState extends State<BookPage> {
   late DateTime _end;
   final _note = TextEditingController();
   String? _error;
+  var _datesReady = false;
 
   @override
   void initState() {
@@ -214,19 +224,43 @@ class _BookPageState extends State<BookPage> {
     });
   }
 
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_datesReady) return;
+    _datesReady = true;
+    final open = ShareKitScope.of(context).nextOpenDay(widget.itemId);
+    _start = open;
+    _end = open;
+  }
+
   void _confirm() {
     final store = ShareKitScope.of(context);
+    final user = AccountScope.of(context).user;
+    final item = store.findItem(widget.itemId);
+    if (item == null) {
+      setState(() => _error = tr(context, '這件物品已下架。', 'This item was removed.'));
+      return;
+    }
+    if (item.owner == user.label || item.owner == user.name) {
+      setState(() => _error = tr(context, '不能預約自己上架的物品。', "You can't book your own item."));
+      return;
+    }
     final booking = store.createBooking(
       itemId: widget.itemId,
       start: _start,
       end: _end,
       note: _note.text,
+      borrower: user.label,
     );
     if (booking == null) {
-      setState(() => _error = '這段日期已有人預約，請改選其他日子。');
+      setState(() => _error = tr(
+        context,
+        '這段日期已有人預約，請改選其他日子。',
+        'Those dates are taken. Pick another day.',
+      ));
       return;
     }
-    store.openTab(1);
+    store.openTab(2);
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => BookingDetailPage(bookingId: booking.id),
@@ -289,11 +323,14 @@ class _BookPageState extends State<BookPage> {
           const SizedBox(height: 18),
           const Text('費用', style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          _FeeRow(label: '日數', value: '${quote.days} 日'),
-          _FeeRow(label: '租金', value: quote.free ? '免費' : money(quote.rent)),
+          _FeeRow(label: tr(context, '日數', 'Days'), value: '${quote.days}'),
           _FeeRow(
-            label: '服務費',
-            value: quote.free ? 'HK\$0' : money(quote.serviceFee),
+            label: tr(context, '租金', 'Rent'),
+            value: quote.free ? tr(context, '免費', 'Free') : money(quote.rent),
+          ),
+          _FeeRow(
+            label: tr(context, '平台費', 'Platform fee'),
+            value: 'HK\$0',
           ),
           const Divider(),
           _FeeRow(

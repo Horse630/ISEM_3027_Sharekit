@@ -10,6 +10,12 @@ extension HkRegionX on HkRegion {
     HkRegion.kowloon => '九龍',
     HkRegion.newTerritories => '新界',
   };
+
+  String get en => switch (this) {
+    HkRegion.island => 'Hong Kong Island',
+    HkRegion.kowloon => 'Kowloon',
+    HkRegion.newTerritories => 'New Territories',
+  };
 }
 
 enum HkDistrict {
@@ -43,6 +49,27 @@ enum HkDistrict {
     }
     return HkDistrict.kowloonCity;
   }
+
+  String get en => switch (this) {
+    HkDistrict.centralWestern => 'Central & Western',
+    HkDistrict.wanChai => 'Wan Chai',
+    HkDistrict.eastern => 'Eastern',
+    HkDistrict.southern => 'Southern',
+    HkDistrict.yauTsimMong => 'Yau Tsim Mong',
+    HkDistrict.shamShuiPo => 'Sham Shui Po',
+    HkDistrict.kowloonCity => 'Kowloon City',
+    HkDistrict.wongTaiSin => 'Wong Tai Sin',
+    HkDistrict.kwunTong => 'Kwun Tong',
+    HkDistrict.kwaiTsing => 'Kwai Tsing',
+    HkDistrict.tsuenWan => 'Tsuen Wan',
+    HkDistrict.tuenMun => 'Tuen Mun',
+    HkDistrict.yuenLong => 'Yuen Long',
+    HkDistrict.north => 'North',
+    HkDistrict.taiPo => 'Tai Po',
+    HkDistrict.shaTin => 'Sha Tin',
+    HkDistrict.saiKung => 'Sai Kung',
+    HkDistrict.islands => 'Islands',
+  };
 }
 
 class DistrictFilter {
@@ -59,6 +86,12 @@ extension ItemSortX on ItemSort {
     ItemSort.rating => '評價',
     ItemSort.priceLow => '租金',
   };
+
+  String get en => switch (this) {
+    ItemSort.nearest => 'Nearest',
+    ItemSort.rating => 'Rating',
+    ItemSort.priceLow => 'Price',
+  };
 }
 
 enum ItemCategory { tool, home, outdoor, event }
@@ -69,6 +102,13 @@ extension ItemCategoryX on ItemCategory {
     ItemCategory.home => '家居',
     ItemCategory.outdoor => '戶外',
     ItemCategory.event => '活動',
+  };
+
+  String get en => switch (this) {
+    ItemCategory.tool => 'Tools',
+    ItemCategory.home => 'Home',
+    ItemCategory.outdoor => 'Outdoor',
+    ItemCategory.event => 'Events',
   };
 
   IconData get icon => switch (this) {
@@ -95,6 +135,11 @@ extension HandoverMethodX on HandoverMethod {
     HandoverMethod.faceToFace => '當面交接',
     HandoverMethod.mail => '郵寄',
   };
+
+  String get en => switch (this) {
+    HandoverMethod.faceToFace => 'In person',
+    HandoverMethod.mail => 'Post',
+  };
 }
 
 enum DepositStatus { none, pending, paid, refunded }
@@ -106,6 +151,13 @@ extension DepositStatusX on DepositStatus {
     DepositStatus.paid => '按金已付',
     DepositStatus.refunded => '按金已退',
   };
+
+  String get en => switch (this) {
+    DepositStatus.none => 'No deposit',
+    DepositStatus.pending => 'Deposit due',
+    DepositStatus.paid => 'Deposit paid',
+    DepositStatus.refunded => 'Deposit refunded',
+  };
 }
 
 extension BookingStageX on BookingStage {
@@ -114,6 +166,13 @@ extension BookingStageX on BookingStage {
     BookingStage.pickedUp => '使用中',
     BookingStage.returned => '待評價',
     BookingStage.reviewed => '已完成',
+  };
+
+  String get en => switch (this) {
+    BookingStage.reserved => 'To pick up',
+    BookingStage.pickedUp => 'In use',
+    BookingStage.returned => 'To review',
+    BookingStage.reviewed => 'Done',
   };
 
   bool get blocksDates =>
@@ -196,6 +255,7 @@ class Booking {
     required this.pickupCode,
     required this.note,
     this.deposit = DepositStatus.none,
+    this.borrower = '',
     this.returnCondition,
     this.stars,
     this.comment,
@@ -210,6 +270,7 @@ class Booking {
   final String pickupCode;
   final String note;
   final DepositStatus deposit;
+  final String borrower;
   final String? returnCondition;
   final int? stars;
   final String? comment;
@@ -224,6 +285,7 @@ class Booking {
     int? stars,
     String? comment,
     String? issue,
+    String? borrower,
   }) {
     return Booking(
       id: id,
@@ -234,6 +296,7 @@ class Booking {
       pickupCode: pickupCode,
       note: note,
       deposit: deposit ?? this.deposit,
+      borrower: borrower ?? this.borrower,
       returnCondition: returnCondition ?? this.returnCondition,
       stars: stars ?? this.stars,
       comment: comment ?? this.comment,
@@ -288,8 +351,7 @@ PriceQuote quoteFor(ShareItem item, DateTime start, DateTime end) {
     return PriceQuote(days: days, rent: 0, serviceFee: 0, free: true);
   }
   final rent = item.dailyPrice! * days;
-  final fee = (rent * 0.1).roundToDouble();
-  return PriceQuote(days: days, rent: rent, serviceFee: fee, free: false);
+  return PriceQuote(days: days, rent: rent, serviceFee: 0, free: false);
 }
 
 bool rangesOverlap(

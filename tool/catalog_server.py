@@ -44,6 +44,7 @@ def connect():
           pickup_code TEXT NOT NULL,
           note TEXT NOT NULL,
           deposit TEXT NOT NULL,
+          borrower TEXT NOT NULL DEFAULT '',
           return_condition TEXT,
           stars INTEGER,
           comment TEXT,
@@ -59,6 +60,11 @@ def connect():
     if "district" not in columns:
         db.execute(
             "ALTER TABLE items ADD COLUMN district TEXT NOT NULL DEFAULT 'kowloonCity'"
+        )
+    booking_columns = {row[1] for row in db.execute("PRAGMA table_info(bookings)")}
+    if "borrower" not in booking_columns:
+        db.execute(
+            "ALTER TABLE bookings ADD COLUMN borrower TEXT NOT NULL DEFAULT ''"
         )
     return db
 
@@ -114,8 +120,8 @@ def replace(db, payload):
             """
             INSERT INTO bookings (
               id, item_id, start_date, end_date, stage, pickup_code, note,
-              deposit, return_condition, stars, comment, issue
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              deposit, borrower, return_condition, stars, comment, issue
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 booking["id"],
@@ -126,6 +132,7 @@ def replace(db, payload):
                 booking["pickup_code"],
                 booking["note"],
                 booking["deposit"],
+                booking.get("borrower") or "",
                 booking.get("return_condition"),
                 booking.get("stars"),
                 booking.get("comment"),

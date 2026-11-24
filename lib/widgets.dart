@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models.dart';
+import 'text.dart';
 
 class ItemMark extends StatelessWidget {
   const ItemMark({super.key, required this.item, this.size = 64});
@@ -148,7 +149,7 @@ Future<DistrictFilter?> showHkDistrictSheet(
             if (includeAll)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('全港'),
+                title: Text(tr(context, '全港', 'All Hong Kong')),
                 trailing: selected == null
                     ? const Icon(Icons.check, color: Color(0xFF0E6B52))
                     : null,
@@ -159,7 +160,7 @@ Future<DistrictFilter?> showHkDistrictSheet(
               Padding(
                 padding: const EdgeInsets.only(top: 8, bottom: 4),
                 child: Text(
-                  region.label,
+                  regionLabel(context, region),
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
@@ -170,7 +171,7 @@ Future<DistrictFilter?> showHkDistrictSheet(
                   for (final district in HkDistrict.values)
                     if (district.region == region)
                       ChoiceChip(
-                        label: Text(district.label),
+                        label: Text(districtLabel(context, district)),
                         selected: selected == district,
                         onSelected: (_) => Navigator.of(
                           context,

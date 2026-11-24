@@ -103,7 +103,7 @@ class AuthRepository {
         p.join(await getDatabasesPath(), 'sharekit.db');
     _db = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -166,6 +166,15 @@ class AuthRepository {
           if (!hasDistrict) {
             await db.execute(
               "ALTER TABLE items ADD COLUMN district TEXT NOT NULL DEFAULT 'kowloonCity'",
+            );
+          }
+        }
+        if (oldVersion < 6) {
+          final columns = await db.rawQuery('PRAGMA table_info(bookings)');
+          final hasBorrower = columns.any((row) => row['name'] == 'borrower');
+          if (!hasBorrower) {
+            await db.execute(
+              "ALTER TABLE bookings ADD COLUMN borrower TEXT NOT NULL DEFAULT ''",
             );
           }
         }
@@ -415,6 +424,7 @@ class AuthRepository {
         pickup_code TEXT NOT NULL,
         note TEXT NOT NULL,
         deposit TEXT NOT NULL,
+        borrower TEXT NOT NULL DEFAULT '',
         return_condition TEXT,
         stars INTEGER,
         comment TEXT,
@@ -441,6 +451,12 @@ class AuthRepository {
     ''');
   }
 
+  Future<List<ChatMessage>> allMessages() async {
+    if (_useRemote) return _remoteMessages(null);
+    final rows = await _database.query('messages', orderBy: 'id ASC');
+    return _messageFromRow(rows);
+  }
+
   Future<List<ChatMessage>> messagesFor(String itemId) async {
     if (_useRemote) return _remoteMessages(itemId);
     final rows = await _database.query(
@@ -449,6 +465,10 @@ class AuthRepository {
       whereArgs: [itemId],
       orderBy: 'id ASC',
     );
+    return _messageFromRow(rows);
+  }
+
+  List<ChatMessage> _messageFromRow(List<Map<String, Object?>> rows) {
     return [
       for (final row in rows)
         ChatMessage(
@@ -628,14 +648,14 @@ class AuthRepository {
     throw AuthFailure('找不到這個帳號。');
   }
 
-  Future<List<ChatMessage>> _remoteMessages(String itemId) async {
+  Future<List<ChatMessage>> _remoteMessages(String? itemId) async {
     final rows = await _api.list('messages');
     final messages = [
       for (final row in rows)
-        if (row['item_id'] == itemId)
+        if (itemId == null || row['item_id'] == itemId)
           ChatMessage(
             id: (row['message_id'] as num?)?.toInt() ?? 0,
-            itemId: itemId,
+            itemId: (row['item_id'] as String?) ?? itemId ?? '',
             sender: (row['sender'] as String?) ?? '',
             body: (row['body'] as String?) ?? '',
             createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ??

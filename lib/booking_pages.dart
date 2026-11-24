@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'main.dart';
 import 'models.dart';
+import 'text.dart';
 import 'widgets.dart';
 
 class BookingsPage extends StatelessWidget {
@@ -10,7 +11,10 @@ class BookingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = ShareKitScope.of(context);
-    final bookings = store.bookings;
+    final user = AccountScope.of(context).user;
+    final bookings = store.bookings
+        .where((booking) => store.seesBooking(booking, user.label, user.name))
+        .toList();
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -44,7 +48,10 @@ class _BookingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = ShareKitScope.of(context);
     final booking = store.bookingById(bookingId);
-    final item = store.itemById(booking.itemId);
+    final item = store.findItem(booking.itemId);
+    if (item == null) {
+      return const SizedBox.shrink();
+    }
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
@@ -83,7 +90,7 @@ class _BookingCard extends StatelessWidget {
                 ),
               ),
               Text(
-                booking.stage.label,
+                stageLabel(context, booking.stage),
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
                   color: Color(0xFF0E6B52),
@@ -106,7 +113,15 @@ class BookingDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = ShareKitScope.of(context);
     final booking = store.bookingById(bookingId);
-    final item = store.itemById(booking.itemId);
+    final item = store.findItem(booking.itemId);
+    if (item == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(booking.id)),
+        body: Center(
+          child: Text(tr(context, '這件物品已下架。', 'This item was removed.')),
+        ),
+      );
+    }
     final quote = quoteFor(item, booking.start, booking.end);
     return Scaffold(
       appBar: AppBar(title: Text(booking.id)),
@@ -119,7 +134,7 @@ class BookingDetailPage extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            booking.stage.label,
+            stageLabel(context, booking.stage),
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               color: Color(0xFF0E6B52),
@@ -142,10 +157,17 @@ class BookingDetailPage extends StatelessWidget {
           InfoLine(
             icon: Icons.payments_outlined,
             text: quote.free
-                ? '費用 HK\$0（免費借用）'
-                : '費用 ${money(quote.total)}（租金 ${money(quote.rent)} + 服務費 ${money(quote.serviceFee)}）',
+                ? tr(context, '費用 HK\$0（免費借用，平台不收費）', 'HK\$0. Free to borrow. No platform fee.')
+                : tr(
+                    context,
+                    '租金 ${money(quote.rent)}，平台不另收費',
+                    'Rent ${money(quote.rent)}. No platform fee.',
+                  ),
           ),
-          InfoLine(icon: Icons.account_balance_wallet_outlined, text: booking.deposit.label),
+          InfoLine(
+            icon: Icons.account_balance_wallet_outlined,
+            text: depositLabel(context, booking.deposit),
+          ),
           if (booking.issue != null)
             InfoLine(icon: Icons.report_outlined, text: '問題回報：${booking.issue}'),
           if (booking.stage == BookingStage.reserved &&
@@ -404,10 +426,16 @@ class DepositPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = ShareKitScope.of(context);
     final booking = store.bookingById(bookingId);
-    final item = store.itemById(booking.itemId);
+    final item = store.findItem(booking.itemId);
+    if (item == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(tr(context, '付款', 'Payment'))),
+        body: Center(child: Text(tr(context, '這件物品已下架。', 'This item was removed.'))),
+      );
+    }
     final quote = quoteFor(item, booking.start, booking.end);
     return Scaffold(
-      appBar: AppBar(title: const Text('按金付款')),
+      appBar: AppBar(title: Text(tr(context, '付款', 'Payment'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
@@ -416,10 +444,16 @@ class DepositPage extends StatelessWidget {
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
-          const Text('付款會交給付款服務。確認後，這筆按金會標記為已付。'),
+          Text(
+            tr(
+              context,
+              '這是付給物主的租金，平台不另收費。確認後會標記為已付。',
+              'This rent goes to the owner. The platform adds no fee.',
+            ),
+          ),
           const SizedBox(height: 16),
           Text(
-            '按金 ${money(quote.total)}',
+            money(quote.total),
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 16),

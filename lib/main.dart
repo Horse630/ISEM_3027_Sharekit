@@ -5,10 +5,13 @@ import 'account_page.dart';
 import 'auth_repository.dart';
 import 'booking_pages.dart';
 import 'catalog_gateway.dart';
+import 'chat_center.dart';
+import 'chats_page.dart';
 import 'explore_page.dart';
 import 'item_pages.dart';
 import 'login_page.dart';
 import 'store.dart';
+import 'text.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +33,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
     databasePath: widget.databasePath,
   );
   final _ui = UiSettings();
+  final _chat = ChatCenter();
   AppUser? _user;
   Object? _error;
   var _loading = true;
@@ -92,6 +96,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
   @override
   void dispose() {
     _ui.removeListener(_onUi);
+    _chat.stop();
     _auth.close();
     super.dispose();
   }
@@ -106,6 +111,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
     } else if (_user == null) {
       home = LoginPage(
         auth: _auth,
+        ui: _ui,
         onLoggedIn: (next) => setState(() => _user = next),
       );
     } else {
@@ -114,6 +120,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
         user: _user!,
         auth: _auth,
         ui: _ui,
+        chat: _chat,
         onUserChanged: (next) => setState(() => _user = next),
         onLogout: _logout,
       );
@@ -125,7 +132,9 @@ class _ShareKitAppState extends State<ShareKitApp> {
         scrollBehavior: const ShareKitScrollBehavior(),
         theme: _theme(),
         builder: (context, child) {
-          return MediaQuery(
+          return AppLang(
+            english: _ui.english,
+            child: MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(_ui.textScale),
             ),
@@ -140,6 +149,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
                 ),
               ),
             ),
+          ),
           ),
           );
         },
@@ -197,6 +207,7 @@ class HomeShell extends StatefulWidget {
     required this.user,
     required this.auth,
     required this.ui,
+    required this.chat,
     required this.onUserChanged,
     required this.onLogout,
   });
@@ -205,6 +216,7 @@ class HomeShell extends StatefulWidget {
   final AppUser user;
   final AuthRepository auth;
   final UiSettings ui;
+  final ChatCenter chat;
   final ValueChanged<AppUser> onUserChanged;
   final Future<void> Function() onLogout;
 
@@ -219,11 +231,21 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     widget.store.addListener(_syncTab);
+    widget.chat.bind(widget.auth, widget.user.label);
+  }
+
+  @override
+  void didUpdateWidget(HomeShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user.label != widget.user.label) {
+      widget.chat.bind(widget.auth, widget.user.label);
+    }
   }
 
   @override
   void dispose() {
     widget.store.removeListener(_syncTab);
+    widget.chat.stop();
     super.dispose();
   }
 
@@ -238,6 +260,12 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final pages = [
       const ExplorePage(),
+      ChatsPage(
+        center: widget.chat,
+        store: widget.store,
+        auth: widget.auth,
+        user: widget.user,
+      ),
       const BookingsPage(),
       ListItemPage(ownerName: widget.user.label),
       SettingsPage(
@@ -253,11 +281,15 @@ class _HomeShellState extends State<HomeShell> {
     final accountBar = _AccountBar(
       userName: widget.user.label,
       onLogout: widget.onLogout,
-      onOpenAccount: () => setState(() => _index = 3),
+      onOpenAccount: () => setState(() => _index = 4),
     );
 
     if (wide) {
-      return Scaffold(
+      return ChatScope(
+        chat: widget.chat,
+        child: ListenableBuilder(
+        listenable: widget.chat,
+        builder: (context, _) => Scaffold(
         body: Row(
           children: [
             NavigationRail(
@@ -265,26 +297,31 @@ class _HomeShellState extends State<HomeShell> {
               onDestinationSelected: (index) => setState(() => _index = index),
               labelType: NavigationRailLabelType.all,
               backgroundColor: Colors.white,
-              destinations: const [
+              destinations: [
                 NavigationRailDestination(
-                  icon: Icon(Icons.explore_outlined),
-                  selectedIcon: Icon(Icons.explore),
-                  label: Text('探索'),
+                  icon: const Icon(Icons.explore_outlined),
+                  selectedIcon: const Icon(Icons.explore),
+                  label: Text(tr(context, '探索', 'Explore')),
                 ),
                 NavigationRailDestination(
-                  icon: Icon(Icons.event_note_outlined),
-                  selectedIcon: Icon(Icons.event_note),
-                  label: Text('預約'),
+                  icon: _chatIcon(false),
+                  selectedIcon: _chatIcon(true),
+                  label: Text(tr(context, '聊天', 'Chats')),
                 ),
                 NavigationRailDestination(
-                  icon: Icon(Icons.add_box_outlined),
-                  selectedIcon: Icon(Icons.add_box),
-                  label: Text('上架'),
+                  icon: const Icon(Icons.event_note_outlined),
+                  selectedIcon: const Icon(Icons.event_note),
+                  label: Text(tr(context, '預約', 'Bookings')),
                 ),
                 NavigationRailDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings),
-                  label: Text('設定'),
+                  icon: const Icon(Icons.add_box_outlined),
+                  selectedIcon: const Icon(Icons.add_box),
+                  label: Text(tr(context, '上架', 'List')),
+                ),
+                NavigationRailDestination(
+                  icon: const Icon(Icons.settings_outlined),
+                  selectedIcon: const Icon(Icons.settings),
+                  label: Text(tr(context, '設定', 'Settings')),
                 ),
               ],
             ),
@@ -299,10 +336,16 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ],
         ),
-      );
+      ),
+    ),
+    );
     }
 
-    return Scaffold(
+    return ChatScope(
+      chat: widget.chat,
+      child: ListenableBuilder(
+      listenable: widget.chat,
+      builder: (context, _) => Scaffold(
       body: Column(
         children: [
           accountBar,
@@ -312,29 +355,49 @@ class _HomeShellState extends State<HomeShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) => setState(() => _index = index),
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore),
-            label: '探索',
+            icon: const Icon(Icons.explore_outlined),
+            selectedIcon: const Icon(Icons.explore),
+            label: tr(context, '探索', 'Explore'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.event_note_outlined),
-            selectedIcon: Icon(Icons.event_note),
-            label: '預約',
+            icon: _chatIcon(false),
+            selectedIcon: _chatIcon(true),
+            label: tr(context, '聊天', 'Chats'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.add_box_outlined),
-            selectedIcon: Icon(Icons.add_box),
-            label: '上架',
+            icon: const Icon(Icons.event_note_outlined),
+            selectedIcon: const Icon(Icons.event_note),
+            label: tr(context, '預約', 'Bookings'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: '設定',
+            icon: const Icon(Icons.add_box_outlined),
+            selectedIcon: const Icon(Icons.add_box),
+            label: tr(context, '上架', 'List'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.settings_outlined),
+            selectedIcon: const Icon(Icons.settings),
+            label: tr(context, '設定', 'Settings'),
           ),
         ],
       ),
+      ),
+      ),
+    );
+  }
+
+  Widget _chatIcon(bool selected) {
+    final icon = Icon(
+      selected ? Icons.chat_bubble : Icons.chat_bubble_outline,
+    );
+    final count = widget.chat.unread;
+    if (count <= 0) return icon;
+    return Badge(
+      label: Text(count > 99 ? '99+' : '$count'),
+      backgroundColor: const Color(0xFF9A4632),
+      child: icon,
     );
   }
 }
@@ -434,7 +497,7 @@ ThemeData _theme() {
       style: FilledButton.styleFrom(
         backgroundColor: green,
         foregroundColor: Colors.white,
-        minimumSize: const Size.fromHeight(52),
+        minimumSize: const Size(64, 52),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),

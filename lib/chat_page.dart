@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'auth_repository.dart';
+import 'chat_center.dart';
+import 'text.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({
@@ -12,6 +14,7 @@ class ChatPage extends StatefulWidget {
     required this.itemName,
     required this.ownerName,
     required this.senderName,
+    this.center,
   });
 
   final AuthRepository auth;
@@ -19,6 +22,7 @@ class ChatPage extends StatefulWidget {
   final String itemName;
   final String ownerName;
   final String senderName;
+  final ChatCenter? center;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -51,6 +55,7 @@ class _ChatPageState extends State<ChatPage> {
       _messages = messages;
       _loading = false;
     });
+    await widget.center?.markItem(widget.itemId);
   }
 
   Future<void> _send() async {
@@ -68,21 +73,31 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('聯絡${widget.ownerName}')),
+      appBar: AppBar(
+        title: Text(tr(context, '聯絡${widget.ownerName}', 'Message ${widget.ownerName}')),
+      ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
             child: Text(
-              '關於「${widget.itemName}」。可以約好當面交接或郵寄。',
+              tr(
+                context,
+                '關於「${widget.itemName}」。可以約好當面交接或郵寄。',
+                'About “${widget.itemName}”. Agree a handover here.',
+              ),
               style: const TextStyle(color: Color(0xFF5E6A64)),
             ),
           ),
           Expanded(
             child: _loading
-                ? const Center(child: Text('正在打開對話…'))
+                ? Center(child: Text(tr(context, '正在打開對話…', 'Opening chat…')))
                 : _messages.isEmpty
-                    ? const Center(child: Text('還沒有訊息。寫一句給物主吧。'))
+                    ? Center(
+                        child: Text(
+                          tr(context, '還沒有訊息。寫一句給物主吧。', 'No messages yet.'),
+                        ),
+                      )
                     : ListView(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         children: [
@@ -102,7 +117,9 @@ class _ChatPageState extends State<ChatPage> {
                   Expanded(
                     child: TextField(
                       controller: _text,
-                      decoration: const InputDecoration(hintText: '輸入訊息'),
+                      decoration: InputDecoration(
+                        hintText: tr(context, '輸入訊息', 'Message'),
+                      ),
                       onSubmitted: (_) => _send(),
                     ),
                   ),
@@ -113,7 +130,7 @@ class _ChatPageState extends State<ChatPage> {
                       maximumSize: const Size(96, 52),
                     ),
                     onPressed: _send,
-                    child: const Text('送出'),
+                    child: Text(tr(context, '送出', 'Send')),
                   ),
                 ],
               ),

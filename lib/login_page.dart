@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 
+import 'account_page.dart';
 import 'auth_repository.dart';
+import 'text.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.auth, required this.onLoggedIn});
+  const LoginPage({
+    super.key,
+    required this.auth,
+    required this.ui,
+    required this.onLoggedIn,
+  });
 
   final AuthRepository auth;
+  final UiSettings ui;
   final ValueChanged<AppUser> onLoggedIn;
 
   @override
@@ -138,6 +146,13 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.center,
+                    child: TextButton(
+                      onPressed: () => widget.ui.setEnglish(!widget.ui.english),
+                      child: Text(widget.ui.english ? '中文' : 'English'),
+                    ),
+                  ),
                   Text(
                     _challenge != null
                         ? '確認電郵或電話後就可以使用。'
@@ -204,12 +219,12 @@ class _LoginPageState extends State<LoginPage> {
         const SizedBox(height: 18),
         FilledButton(
           onPressed: _busy ? null : _submit,
-          child: Text(
+            child: Text(
             _busy
-                ? '請稍候…'
+                ? tr(context, '請稍候…', 'Please wait…')
                 : _registering
-                    ? '建立帳號'
-                    : '登入',
+                    ? tr(context, '建立帳號', 'Create account')
+                    : tr(context, '登入', 'Log in'),
           ),
         ),
         if (_error != null) ...[

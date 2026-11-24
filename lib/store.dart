@@ -74,16 +74,54 @@ class ShareStore extends ChangeNotifier {
   bool _sameItems(CatalogSnapshot snapshot) {
     if (snapshot.items.length != _items.length) return false;
     if (snapshot.bookings.length != _bookings.length) return false;
+    if (snapshot.sequence != _sequence) return false;
     for (var index = 0; index < snapshot.items.length; index++) {
       if (snapshot.items[index].id != _items[index].id) return false;
     }
-    return snapshot.sequence == _sequence;
+    final current = {for (final booking in _bookings) booking.id: booking};
+    for (final next in snapshot.bookings) {
+      final booking = current[next.id];
+      if (booking == null ||
+          booking.stage != next.stage ||
+          booking.deposit != next.deposit ||
+          booking.borrower != next.borrower) {
+        return false;
+      }
+    }
+    return true;
   }
 
   List<ShareItem> get items => List.unmodifiable(_items);
   List<Booking> get bookings => List.unmodifiable(_bookings.reversed);
 
   ShareItem itemById(String id) => _items.firstWhere((item) => item.id == id);
+
+  ShareItem? findItem(String id) {
+    for (final item in _items) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  bool seesBooking(Booking booking, String name, String login) {
+    final names = {name, login};
+    if (booking.borrower.isNotEmpty && names.contains(booking.borrower)) {
+      return true;
+    }
+    final item = findItem(booking.itemId);
+    if (item != null && names.contains(item.owner)) return true;
+    return booking.borrower.isEmpty;
+  }
+
+  DateTime nextOpenDay(String itemId) {
+    var day = dateOnly(DateTime.now()).add(const Duration(days: 1));
+    final last = dateOnly(DateTime.now()).add(const Duration(days: 90));
+    while (!day.isAfter(last)) {
+      if (rangeAvailable(itemId, day, day)) return day;
+      day = day.add(const Duration(days: 1));
+    }
+    return dateOnly(DateTime.now()).add(const Duration(days: 1));
+  }
 
   Booking bookingById(String id) =>
       _bookings.firstWhere((booking) => booking.id == id);
@@ -160,12 +198,15 @@ class ShareStore extends ChangeNotifier {
     required DateTime start,
     required DateTime end,
     required String note,
+    required String borrower,
   }) {
     final from = dateOnly(start);
     final to = dateOnly(end);
     if (to.isBefore(from) || !rangeAvailable(itemId, from, to)) return null;
+    final item = findItem(itemId);
+    if (item == null) return null;
+    if (borrower == item.owner) return null;
     _sequence += 1;
-    final item = itemById(itemId);
     final booking = Booking(
       id: 'SK-$_sequence',
       itemId: itemId,
@@ -175,6 +216,7 @@ class ShareStore extends ChangeNotifier {
       pickupCode: (_sequence * 37 % 9000 + 1000).toString(),
       note: note.trim().isEmpty ? '在屋苑會所大堂交接' : note.trim(),
       deposit: item.isFree ? DepositStatus.none : DepositStatus.pending,
+      borrower: borrower,
     );
     _bookings.add(booking);
     notifyListeners();

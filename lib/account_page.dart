@@ -7,18 +7,31 @@ import 'auth_repository.dart';
 import 'camera_capture.dart';
 import 'models.dart';
 import 'store.dart';
+import 'text.dart';
 import 'widgets.dart';
 
 class UiSettings extends ChangeNotifier {
   double textScale = 1;
+  bool english = false;
 
   static const _key = 'sharekit_text_scale';
+  static const _languageKey = 'sharekit_english';
 
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       textScale = prefs.getDouble(_key) ?? 1;
+      english = prefs.getBool(_languageKey) ?? false;
       notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> setEnglish(bool value) async {
+    english = value;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_languageKey, value);
     } catch (_) {}
   }
 
@@ -234,7 +247,36 @@ class _SettingsPageState extends State<SettingsPage> {
             label: Text('居住地區 · ${_district.label}'),
           ),
           const SizedBox(height: 16),
-          const Text('介面文字', style: TextStyle(fontWeight: FontWeight.w800)),
+          Text(
+            tr(context, '語言', 'Language'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          ListenableBuilder(
+            listenable: widget.ui,
+            builder: (context, _) {
+              return Wrap(
+                spacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('中文'),
+                    selected: !widget.ui.english,
+                    onSelected: (_) => widget.ui.setEnglish(false),
+                  ),
+                  ChoiceChip(
+                    label: const Text('English'),
+                    selected: widget.ui.english,
+                    onSelected: (_) => widget.ui.setEnglish(true),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          Text(
+            tr(context, '介面文字', 'Text size'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           ListenableBuilder(
             listenable: widget.ui,
