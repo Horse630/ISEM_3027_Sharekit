@@ -366,6 +366,8 @@ ShareItem _withPhoto(ShareItem item, Uint8List? photo) {
   );
 }
 
+Uint8List? shrinkPhotoBytes(Uint8List? bytes) => _shrinkPhoto(bytes);
+
 Uint8List? _shrinkPhoto(Uint8List? bytes) {
   if (bytes == null || bytes.length < 80000) return bytes;
   final decoded = img.decodeImage(bytes);

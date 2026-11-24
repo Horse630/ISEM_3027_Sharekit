@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -43,9 +42,25 @@ class _ShareKitAppState extends State<ShareKitApp> {
   Future<void> _openSession() async {
     try {
       await _auth.open();
-      final local = LocalCatalog(_auth.database, seed: seedItems);
-      final remote = kIsWeb ? await PublicCatalog.connect() : null;
-      await widget.store.attach(CombinedCatalog(local: local, remote: remote));
+      if (widget.databasePath == null) {
+        final remote = await PublicCatalog.connect();
+        if (remote == null) {
+          throw StateError('共用資料庫連不上');
+        }
+        var snapshot = await remote.load();
+        if (snapshot.items.isEmpty) {
+          snapshot = CatalogSnapshot(
+            items: seedItems(),
+            bookings: const [],
+            sequence: 240,
+          );
+          await remote.save(snapshot);
+        }
+        await widget.store.attach(remote);
+      } else {
+        final local = LocalCatalog(_auth.database, seed: seedItems);
+        await widget.store.attach(local);
+      }
       final user = await _auth.currentUser();
       if (!mounted) return;
       setState(() {

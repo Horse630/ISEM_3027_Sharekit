@@ -4,9 +4,12 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'catalog_gateway.dart';
 import 'database_factory.dart';
+import 'remote_api.dart';
 
 class AuthFailure implements Exception {
   AuthFailure(this.message);
@@ -75,9 +78,21 @@ class AuthRepository {
 
   final String? databasePath;
   Database? _db;
+  var _opened = false;
+  var _useRemote = false;
+  final _api = RemoteApi();
+  final Map<String, Map<String, dynamic>> _remoteUsers = {};
+
+  static const _sessionKey = 'sharekit_session_name';
 
   Future<void> open() async {
-    if (_db != null) return;
+    if (_opened) return;
+    if (databasePath == null) {
+      _useRemote = true;
+      await _seedRemoteDemo();
+      _opened = true;
+      return;
+    }
     configureDatabase();
     final path = databasePath ??
         p.join(await getDatabasesPath(), 'sharekit.db');
@@ -140,9 +155,11 @@ class AuthRepository {
     );
     await _seedDemoAccount();
     await _markDemoReady();
+    _opened = true;
   }
 
   Future<AppUser?> currentUser() async {
+    if (_useRemote) return _remoteCurrentUser();
     final db = _database;
     final rows = await db.rawQuery('''
       SELECT users.id, users.name, users.display_name, users.contact,
@@ -159,6 +176,7 @@ class AuthRepository {
     required String name,
     required String password,
   }) async {
+    if (_useRemote) return _remoteLogin(name: name, password: password);
     final db = _database;
     final rows = await db.query(
       'users',
@@ -190,6 +208,9 @@ class AuthRepository {
     required String password,
     required String contact,
   }) async {
+    if (_useRemote) {
+      return _remoteRegister(name: name, password: password, contact: contact);
+    }
     final trimmed = name.trim();
     final address = contact.trim();
     if (trimmed.isEmpty || password.isEmpty || address.isEmpty) {
@@ -225,6 +246,7 @@ class AuthRepository {
   }
 
   Future<AppUser> verify({required String name, required String code}) async {
+    if (_useRemote) return _remoteVerify(name: name, code: code);
     final db = _database;
     final rows = await db.query(
       'users',
@@ -274,6 +296,13 @@ class AuthRepository {
     required String displayName,
     Uint8List? photo,
   }) async {
+    if (_useRemote) {
+      return _remoteUpdateProfile(
+        userId: userId,
+        displayName: displayName,
+        photo: photo,
+      );
+    }
     final name = displayName.trim();
     if (name.isEmpty) throw AuthFailure('請填顯示名稱。');
     final values = <String, Object?>{'display_name': name};
@@ -289,6 +318,7 @@ class AuthRepository {
   }
 
   Future<AppUser> joinCommunity(int userId) async {
+    if (_useRemote) return _remoteJoinCommunity(userId);
     await _database.update(
       'users',
       {'community_joined': 1},
@@ -305,6 +335,11 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
+    if (_useRemote) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_sessionKey);
+      return;
+    }
     await _database.delete('sessions', where: 'id = 1');
   }
 
@@ -379,6 +414,7 @@ class AuthRepository {
   }
 
   Future<List<ChatMessage>> messagesFor(String itemId) async {
+    if (_useRemote) return _remoteMessages(itemId);
     final rows = await _database.query(
       'messages',
       where: 'item_id = ?',
@@ -402,6 +438,9 @@ class AuthRepository {
     required String sender,
     required String body,
   }) async {
+    if (_useRemote) {
+      return _remoteSendMessage(itemId: itemId, sender: sender, body: body);
+    }
     final text = body.trim();
     if (text.isEmpty) return;
     await _database.insert('messages', {
@@ -410,6 +449,210 @@ class AuthRepository {
       'body': text,
       'created_at': DateTime.now().toIso8601String(),
     });
+  }
+
+  Future<void> _loadRemoteUsers() async {
+    final rows = await _api.list('users');
+    _remoteUsers
+      ..clear()
+      ..addEntries(
+        rows.where((row) => row['name'] is String).map(
+          (row) => MapEntry(row['name'] as String, row),
+        ),
+      );
+  }
+
+  Future<void> _seedRemoteDemo() async {
+    await _loadRemoteUsers();
+    if (_remoteUsers.containsKey(demoName)) return;
+    final created = await _api.create('users', {
+      'user_id': 1,
+      'name': demoName,
+      'password_hash': _hash(demoPassword),
+      'created_at': DateTime.now().toIso8601String(),
+      'contact': 'isem3027@sharekit.local',
+      'verified': 1,
+      'display_name': demoName,
+      'community_joined': 1,
+      'verify_code': '',
+    });
+    _remoteUsers[demoName] = created;
+  }
+
+  Future<void> _saveRemoteSession(String? name) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (name == null || name.isEmpty) {
+      await prefs.remove(_sessionKey);
+    } else {
+      await prefs.setString(_sessionKey, name);
+    }
+  }
+
+  Future<AppUser?> _remoteCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString(_sessionKey);
+    if (name == null || name.isEmpty) return null;
+    await _loadRemoteUsers();
+    final row = _remoteUsers[name];
+    if (row == null) return null;
+    return _userFromRemote(row);
+  }
+
+  Future<AppUser?> _remoteLogin({
+    required String name,
+    required String password,
+  }) async {
+    await _loadRemoteUsers();
+    final row = _remoteUsers[name];
+    if (row == null || row['password_hash'] != _hash(password)) return null;
+    if (!_flag(row['verified'])) {
+      throw AuthFailure('請先驗證電郵或電話。');
+    }
+    await _saveRemoteSession(name);
+    return _userFromRemote(row);
+  }
+
+  Future<VerificationChallenge> _remoteRegister({
+    required String name,
+    required String password,
+    required String contact,
+  }) async {
+    final trimmed = name.trim();
+    final address = contact.trim();
+    if (trimmed.isEmpty || password.isEmpty || address.isEmpty) {
+      throw AuthFailure('請填名稱、密碼和電郵或電話。');
+    }
+    await _loadRemoteUsers();
+    if (_remoteUsers.containsKey(trimmed)) {
+      throw AuthFailure('這個名稱已經有人用了。');
+    }
+    final nextId = _remoteUsers.values.fold<int>(1, (highest, row) {
+      final id = (row['user_id'] as num?)?.toInt() ?? 0;
+      return id >= highest ? id + 1 : highest;
+    });
+    final code = _code();
+    final created = await _api.create('users', {
+      'user_id': nextId,
+      'name': trimmed,
+      'password_hash': _hash(password),
+      'created_at': DateTime.now().toIso8601String(),
+      'contact': address,
+      'verified': 0,
+      'display_name': trimmed,
+      'community_joined': 0,
+      'verify_code': code,
+    });
+    _remoteUsers[trimmed] = created;
+    return VerificationChallenge(name: trimmed, contact: address, code: code);
+  }
+
+  Future<AppUser> _remoteVerify({
+    required String name,
+    required String code,
+  }) async {
+    await _loadRemoteUsers();
+    final row = _remoteUsers[name];
+    if (row == null) throw AuthFailure('找不到這個帳號。');
+    if ((row['verify_code'] as String? ?? '') != code.trim()) {
+      throw AuthFailure('驗證碼不對。');
+    }
+    row['verified'] = 1;
+    row['verify_code'] = '';
+    await _api.replace('users', row['_id'] as String, row);
+    await _saveRemoteSession(name);
+    return _userFromRemote(row);
+  }
+
+  Future<AppUser> _remoteUpdateProfile({
+    required int userId,
+    required String displayName,
+    Uint8List? photo,
+  }) async {
+    final name = displayName.trim();
+    if (name.isEmpty) throw AuthFailure('請填顯示名稱。');
+    await _loadRemoteUsers();
+    final row = _remoteById(userId);
+    row['display_name'] = name;
+    if (photo != null) {
+      final shrunk = shrinkPhotoBytes(photo);
+      row['photo'] = shrunk == null ? '' : base64Encode(shrunk);
+    }
+    await _api.replace('users', row['_id'] as String, row);
+    return _userFromRemote(row);
+  }
+
+  Future<AppUser> _remoteJoinCommunity(int userId) async {
+    await _loadRemoteUsers();
+    final row = _remoteById(userId);
+    row['community_joined'] = 1;
+    await _api.replace('users', row['_id'] as String, row);
+    return _userFromRemote(row);
+  }
+
+  Map<String, dynamic> _remoteById(int userId) {
+    for (final row in _remoteUsers.values) {
+      if ((row['user_id'] as num?)?.toInt() == userId) return row;
+    }
+    throw AuthFailure('找不到這個帳號。');
+  }
+
+  Future<List<ChatMessage>> _remoteMessages(String itemId) async {
+    final rows = await _api.list('messages');
+    final messages = [
+      for (final row in rows)
+        if (row['item_id'] == itemId)
+          ChatMessage(
+            id: (row['message_id'] as num?)?.toInt() ?? 0,
+            itemId: itemId,
+            sender: (row['sender'] as String?) ?? '',
+            body: (row['body'] as String?) ?? '',
+            createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ??
+                DateTime.now(),
+          ),
+    ]..sort((a, b) => a.id.compareTo(b.id));
+    return messages;
+  }
+
+  Future<void> _remoteSendMessage({
+    required String itemId,
+    required String sender,
+    required String body,
+  }) async {
+    final text = body.trim();
+    if (text.isEmpty) return;
+    await _api.create('messages', {
+      'message_id': DateTime.now().millisecondsSinceEpoch,
+      'item_id': itemId,
+      'sender': sender,
+      'body': text,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  AppUser _userFromRemote(Map<String, dynamic> row) {
+    return AppUser(
+      id: (row['user_id'] as num?)?.toInt() ?? 0,
+      name: row['name'] as String,
+      displayName: (row['display_name'] as String?) ?? row['name'] as String,
+      contact: (row['contact'] as String?) ?? '',
+      verified: _flag(row['verified']),
+      communityJoined: _flag(row['community_joined']),
+      photo: _photoOf(row['photo']),
+    );
+  }
+
+  bool _flag(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return false;
+  }
+
+  Uint8List? _photoOf(Object? photo) {
+    if (photo == null || photo == '') return null;
+    if (photo is Uint8List) return photo;
+    if (photo is List) return Uint8List.fromList(photo.cast<int>());
+    if (photo is String) return base64Decode(photo);
+    return null;
   }
 
   Future<void> _seedDemoAccount() async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'auth_repository.dart';
@@ -26,15 +28,18 @@ class _ChatPageState extends State<ChatPage> {
   final _text = TextEditingController();
   List<ChatMessage> _messages = [];
   var _loading = true;
+  Timer? _refresh;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _refresh = Timer.periodic(const Duration(seconds: 6), (_) => _load());
   }
 
   @override
   void dispose() {
+    _refresh?.cancel();
     _text.dispose();
     super.dispose();
   }

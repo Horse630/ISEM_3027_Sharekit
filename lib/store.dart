@@ -33,18 +33,26 @@ class ShareStore extends ChangeNotifier {
       ..addAll(snapshot.bookings);
     _sequence = snapshot.sequence;
     notifyListeners();
-    if (gateway is CombinedCatalog && gateway.remote is PublicCatalog) {
+    if (_isPublic(gateway)) {
       _syncTimer = Timer.periodic(const Duration(seconds: 6), (_) {
         _pullPublic();
       });
     }
   }
 
+  bool _isPublic(CatalogGateway gateway) {
+    if (gateway is PublicCatalog) return true;
+    return gateway is CombinedCatalog && gateway.remote is PublicCatalog;
+  }
+
   Future<void> _pullPublic() async {
     final gateway = _gateway;
-    if (gateway is! CombinedCatalog || gateway.remote is! PublicCatalog) return;
+    if (gateway == null || !_isPublic(gateway)) return;
+    final CatalogGateway remote = gateway is PublicCatalog
+        ? gateway
+        : (gateway as CombinedCatalog).remote!;
     try {
-      final remoteSnapshot = await gateway.remote!.load();
+      final remoteSnapshot = await remote.load();
       final merged = mergeCatalogs(
         remoteSnapshot,
         CatalogSnapshot(
