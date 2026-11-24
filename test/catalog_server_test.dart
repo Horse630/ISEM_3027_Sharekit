@@ -63,6 +63,7 @@ void main() {
       dailyPrice: null,
       photoBytes: Uint8List.fromList([4, 5, 6]),
       address: '九龍塘2座',
+      district: HkDistrict.kowloonCity,
       handover: HandoverMethod.faceToFace,
     );
     await firefox.persisted;

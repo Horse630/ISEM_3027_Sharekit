@@ -29,6 +29,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
   late final AuthRepository _auth = AuthRepository(
     databasePath: widget.databasePath,
   );
+  final _ui = UiSettings();
   AppUser? _user;
   Object? _error;
   var _loading = true;
@@ -36,7 +37,13 @@ class _ShareKitAppState extends State<ShareKitApp> {
   @override
   void initState() {
     super.initState();
+    _ui.addListener(_onUi);
+    _ui.load();
     _openSession();
+  }
+
+  void _onUi() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _openSession() async {
@@ -84,6 +91,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
 
   @override
   void dispose() {
+    _ui.removeListener(_onUi);
     _auth.close();
     super.dispose();
   }
@@ -105,6 +113,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
         store: widget.store,
         user: _user!,
         auth: _auth,
+        ui: _ui,
         onUserChanged: (next) => setState(() => _user = next),
         onLogout: _logout,
       );
@@ -116,7 +125,11 @@ class _ShareKitAppState extends State<ShareKitApp> {
         scrollBehavior: const ShareKitScrollBehavior(),
         theme: _theme(),
         builder: (context, child) {
-          return ColoredBox(
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(_ui.textScale),
+            ),
+            child: ColoredBox(
             color: const Color(0xFFE4DDD2),
             child: Center(
               child: ConstrainedBox(
@@ -127,6 +140,7 @@ class _ShareKitAppState extends State<ShareKitApp> {
                 ),
               ),
             ),
+          ),
           );
         },
         home: home,
@@ -182,6 +196,7 @@ class HomeShell extends StatefulWidget {
     required this.store,
     required this.user,
     required this.auth,
+    required this.ui,
     required this.onUserChanged,
     required this.onLogout,
   });
@@ -189,6 +204,7 @@ class HomeShell extends StatefulWidget {
   final ShareStore store;
   final AppUser user;
   final AuthRepository auth;
+  final UiSettings ui;
   final ValueChanged<AppUser> onUserChanged;
   final Future<void> Function() onLogout;
 
@@ -224,22 +240,20 @@ class _HomeShellState extends State<HomeShell> {
       const ExplorePage(),
       const BookingsPage(),
       ListItemPage(ownerName: widget.user.label),
+      SettingsPage(
+        user: widget.user,
+        auth: widget.auth,
+        store: widget.store,
+        ui: widget.ui,
+        onChanged: widget.onUserChanged,
+        onLogout: widget.onLogout,
+      ),
     ];
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final accountBar = _AccountBar(
       userName: widget.user.label,
       onLogout: widget.onLogout,
-      onOpenAccount: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => AccountPage(
-              user: widget.user,
-              auth: widget.auth,
-              onChanged: widget.onUserChanged,
-            ),
-          ),
-        );
-      },
+      onOpenAccount: () => setState(() => _index = 3),
     );
 
     if (wide) {
@@ -266,6 +280,11 @@ class _HomeShellState extends State<HomeShell> {
                   icon: Icon(Icons.add_box_outlined),
                   selectedIcon: Icon(Icons.add_box),
                   label: Text('上架'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  selectedIcon: Icon(Icons.settings),
+                  label: Text('設定'),
                 ),
               ],
             ),
@@ -308,6 +327,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.add_box_outlined),
             selectedIcon: Icon(Icons.add_box),
             label: '上架',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: '設定',
           ),
         ],
       ),

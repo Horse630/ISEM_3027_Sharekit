@@ -93,6 +93,30 @@ void main() {
     expect(find.text('充電電鑽套裝'), findsOneWidget);
   });
 
+  testWidgets('可以按香港十八區篩選，並在設定改名稱', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await openApp(tester);
+    await tester.tap(find.text('十八區'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('沙田區'));
+    await tester.pumpAndSettle();
+    expect(find.text('雙人露營套裝'), findsOneWidget);
+    expect(find.text('充電電鑽套裝'), findsNothing);
+
+    await tester.tap(find.text('設定'));
+    await tester.pumpAndSettle();
+    expect(find.text('顯示名稱'), findsOneWidget);
+    expect(find.text('介面文字'), findsOneWidget);
+    expect(find.text('聯絡地址'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, '顯示名稱'), '馬仔');
+    await tester.tap(find.text('儲存資料'));
+    await settleDatabase(tester);
+    expect(find.text('馬仔'), findsWidgets);
+  });
+
   testWidgets('可以完成預約、取件、歸還和評價', (tester) async {
     final store = await openApp(tester);
     await tester.tap(find.text('充電電鑽套裝'));
@@ -142,6 +166,7 @@ void main() {
       dailyPrice: 10,
       photoBytes: Uint8List.fromList([9, 8, 7]),
       address: '九龍塘1座',
+      district: HkDistrict.kowloonCity,
       handover: HandoverMethod.mail,
     );
     await first.persisted;
@@ -154,6 +179,7 @@ void main() {
     final item = second.items.firstWhere((item) => item.name == '測試梯子');
     expect(item.owner, 'Isem_3027');
     expect(item.address, '九龍塘1座');
+    expect(item.district, HkDistrict.kowloonCity);
     expect(item.handover, HandoverMethod.mail);
     expect(item.photoBytes, Uint8List.fromList([9, 8, 7]));
     await reopened.close();

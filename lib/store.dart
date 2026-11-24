@@ -97,18 +97,54 @@ class ShareStore extends ChangeNotifier {
     required String query,
     ItemCategory? category,
     required bool freeOnly,
+    HkDistrict? district,
+    String? owner,
+    ItemSort sort = ItemSort.nearest,
   }) {
     final needle = query.trim().toLowerCase();
-    return _items.where((item) {
+    final results = _items.where((item) {
       final matchesQuery =
           needle.isEmpty ||
           item.name.toLowerCase().contains(needle) ||
           item.summary.toLowerCase().contains(needle) ||
+          item.address.toLowerCase().contains(needle) ||
+          item.district.label.toLowerCase().contains(needle) ||
           item.category.label.contains(query.trim());
       final matchesCategory = category == null || item.category == category;
       final matchesFree = !freeOnly || item.isFree;
-      return matchesQuery && matchesCategory && matchesFree;
+      final matchesDistrict = district == null || item.district == district;
+      final matchesOwner = owner == null || item.owner == owner;
+      return matchesQuery &&
+          matchesCategory &&
+          matchesFree &&
+          matchesDistrict &&
+          matchesOwner;
     }).toList();
+    switch (sort) {
+      case ItemSort.nearest:
+        results.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+      case ItemSort.rating:
+        results.sort((a, b) => b.rating.compareTo(a.rating));
+      case ItemSort.priceLow:
+        results.sort(
+          (a, b) => (a.dailyPrice ?? -1).compareTo(b.dailyPrice ?? -1),
+        );
+    }
+    return results;
+  }
+
+  void renameOwner(String from, String to) {
+    final next = to.trim();
+    if (from.trim().isEmpty || next.isEmpty || from == next) return;
+    var changed = false;
+    for (var index = 0; index < _items.length; index++) {
+      if (_items[index].owner != from) continue;
+      _items[index] = _items[index].copyWith(owner: next);
+      changed = true;
+    }
+    if (!changed) return;
+    notifyListeners();
+    _persist();
   }
 
   bool rangeAvailable(String itemId, DateTime start, DateTime end) {
@@ -218,6 +254,7 @@ class ShareStore extends ChangeNotifier {
     required double? dailyPrice,
     required Uint8List photoBytes,
     required String address,
+    required HkDistrict district,
     required HandoverMethod handover,
   }) {
     _sequence += 1;
@@ -237,6 +274,7 @@ class ShareStore extends ChangeNotifier {
         dailyPrice: dailyPrice,
         photoBytes: photoBytes,
         address: address.trim(),
+        district: district,
         handover: handover,
       ),
     );
@@ -280,6 +318,7 @@ List<ShareItem> seedItems() {
       rating: 4.8,
       reviewCount: 16,
       handovers: 21,
+      district: HkDistrict.kowloonCity,
     ),
     ShareItem(
       id: 'cleaner',
@@ -293,6 +332,7 @@ List<ShareItem> seedItems() {
       rating: 4.6,
       reviewCount: 9,
       handovers: 11,
+      district: HkDistrict.kowloonCity,
     ),
     ShareItem(
       id: 'camp',
@@ -306,6 +346,7 @@ List<ShareItem> seedItems() {
       rating: 4.7,
       reviewCount: 7,
       handovers: 8,
+      district: HkDistrict.shaTin,
     ),
     ShareItem(
       id: 'tables',
@@ -318,6 +359,7 @@ List<ShareItem> seedItems() {
       rating: 4.9,
       reviewCount: 22,
       handovers: 30,
+      district: HkDistrict.kowloonCity,
     ),
     ShareItem(
       id: 'projector',
@@ -331,6 +373,7 @@ List<ShareItem> seedItems() {
       rating: 4.5,
       reviewCount: 6,
       handovers: 6,
+      district: HkDistrict.yauTsimMong,
     ),
     ShareItem(
       id: 'washer',
@@ -344,6 +387,7 @@ List<ShareItem> seedItems() {
       rating: 4.4,
       reviewCount: 5,
       handovers: 5,
+      district: HkDistrict.kwunTong,
     ),
     ShareItem(
       id: 'cookset',
@@ -356,6 +400,7 @@ List<ShareItem> seedItems() {
       rating: 5,
       reviewCount: 4,
       handovers: 4,
+      district: HkDistrict.saiKung,
     ),
     ShareItem(
       id: 'cart',
@@ -369,6 +414,7 @@ List<ShareItem> seedItems() {
       rating: 4.3,
       reviewCount: 11,
       handovers: 14,
+      district: HkDistrict.shamShuiPo,
     ),
   ];
 }

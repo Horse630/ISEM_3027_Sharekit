@@ -32,7 +32,8 @@ def connect():
           daily_price REAL,
           photo BLOB,
           address TEXT NOT NULL,
-          handover TEXT NOT NULL
+          handover TEXT NOT NULL,
+          district TEXT NOT NULL DEFAULT 'kowloonCity'
         );
         CREATE TABLE IF NOT EXISTS bookings (
           id TEXT PRIMARY KEY,
@@ -54,6 +55,11 @@ def connect():
         );
         """
     )
+    columns = {row[1] for row in db.execute("PRAGMA table_info(items)")}
+    if "district" not in columns:
+        db.execute(
+            "ALTER TABLE items ADD COLUMN district TEXT NOT NULL DEFAULT 'kowloonCity'"
+        )
     return db
 
 
@@ -82,8 +88,8 @@ def replace(db, payload):
             """
             INSERT INTO items (
               id, name, owner, category, condition, distance_meters, summary,
-              rating, review_count, handovers, daily_price, photo, address, handover
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              rating, review_count, handovers, daily_price, photo, address, handover, district
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item["id"],
@@ -100,6 +106,7 @@ def replace(db, payload):
                 base64.b64decode(photo) if photo else None,
                 item["address"],
                 item["handover"],
+                item.get("district") or "kowloonCity",
             ),
         )
     for booking in payload.get("bookings", []):

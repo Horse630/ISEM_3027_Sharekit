@@ -2,6 +2,65 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+enum HkRegion { island, kowloon, newTerritories }
+
+extension HkRegionX on HkRegion {
+  String get label => switch (this) {
+    HkRegion.island => '香港島',
+    HkRegion.kowloon => '九龍',
+    HkRegion.newTerritories => '新界',
+  };
+}
+
+enum HkDistrict {
+  centralWestern('中西區', HkRegion.island),
+  wanChai('灣仔區', HkRegion.island),
+  eastern('東區', HkRegion.island),
+  southern('南區', HkRegion.island),
+  yauTsimMong('油尖旺區', HkRegion.kowloon),
+  shamShuiPo('深水埗區', HkRegion.kowloon),
+  kowloonCity('九龍城區', HkRegion.kowloon),
+  wongTaiSin('黃大仙區', HkRegion.kowloon),
+  kwunTong('觀塘區', HkRegion.kowloon),
+  kwaiTsing('葵青區', HkRegion.newTerritories),
+  tsuenWan('荃灣區', HkRegion.newTerritories),
+  tuenMun('屯門區', HkRegion.newTerritories),
+  yuenLong('元朗區', HkRegion.newTerritories),
+  north('北區', HkRegion.newTerritories),
+  taiPo('大埔區', HkRegion.newTerritories),
+  shaTin('沙田區', HkRegion.newTerritories),
+  saiKung('西貢區', HkRegion.newTerritories),
+  islands('離島區', HkRegion.newTerritories);
+
+  const HkDistrict(this.label, this.region);
+
+  final String label;
+  final HkRegion region;
+
+  static HkDistrict byName(String? name) {
+    for (final district in values) {
+      if (district.name == name || district.label == name) return district;
+    }
+    return HkDistrict.kowloonCity;
+  }
+}
+
+class DistrictFilter {
+  const DistrictFilter(this.district);
+
+  final HkDistrict? district;
+}
+
+enum ItemSort { nearest, rating, priceLow }
+
+extension ItemSortX on ItemSort {
+  String get label => switch (this) {
+    ItemSort.nearest => '最近',
+    ItemSort.rating => '評價',
+    ItemSort.priceLow => '租金',
+  };
+}
+
 enum ItemCategory { tool, home, outdoor, event }
 
 extension ItemCategoryX on ItemCategory {
@@ -76,6 +135,7 @@ class ShareItem {
     this.dailyPrice,
     this.photoBytes,
     this.address = '九龍塘示範屋苑',
+    this.district = HkDistrict.kowloonCity,
     this.handover = HandoverMethod.faceToFace,
   });
 
@@ -92,17 +152,24 @@ class ShareItem {
   final double? dailyPrice;
   final Uint8List? photoBytes;
   final String address;
+  final HkDistrict district;
   final HandoverMethod handover;
 
   bool get isFree => dailyPrice == null || dailyPrice == 0;
 
   String get priceLabel => isFree ? '免費借用' : '每日 ${money(dailyPrice!)}';
 
-  ShareItem copyWith({double? rating, int? reviewCount, int? handovers}) {
+  ShareItem copyWith({
+    double? rating,
+    int? reviewCount,
+    int? handovers,
+    String? owner,
+    HkDistrict? district,
+  }) {
     return ShareItem(
       id: id,
       name: name,
-      owner: owner,
+      owner: owner ?? this.owner,
       category: category,
       condition: condition,
       distanceMeters: distanceMeters,
@@ -113,6 +180,7 @@ class ShareItem {
       dailyPrice: dailyPrice,
       photoBytes: photoBytes,
       address: address,
+      district: district ?? this.district,
       handover: handover,
     );
   }

@@ -123,6 +123,70 @@ class _Node extends StatelessWidget {
   }
 }
 
+Future<DistrictFilter?> showHkDistrictSheet(
+  BuildContext context, {
+  required bool includeAll,
+  HkDistrict? selected,
+}) {
+  return showModalBottomSheet<DistrictFilter>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) {
+      final height = MediaQuery.sizeOf(context).height * 0.8;
+      return SafeArea(
+        child: SizedBox(
+          height: height,
+          child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            const Text(
+              '香港十八區',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            if (includeAll)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('全港'),
+                trailing: selected == null
+                    ? const Icon(Icons.check, color: Color(0xFF0E6B52))
+                    : null,
+                onTap: () =>
+                    Navigator.of(context).pop(const DistrictFilter(null)),
+              ),
+            for (final region in HkRegion.values) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 4),
+                child: Text(
+                  region.label,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final district in HkDistrict.values)
+                    if (district.region == region)
+                      ChoiceChip(
+                        label: Text(district.label),
+                        selected: selected == district,
+                        onSelected: (_) => Navigator.of(
+                          context,
+                        ).pop(DistrictFilter(district)),
+                      ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        ),
+      );
+    },
+  );
+}
+
 class InfoLine extends StatelessWidget {
   const InfoLine({super.key, required this.icon, required this.text});
 

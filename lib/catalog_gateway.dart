@@ -229,6 +229,7 @@ Map<String, Object?> itemToRow(ShareItem item) {
     'daily_price': item.dailyPrice,
     'photo': item.photoBytes,
     'address': item.address,
+    'district': item.district.name,
     'handover': item.handover.name,
   };
 }
@@ -248,8 +249,22 @@ ShareItem itemFromRow(Map<String, Object?> row) {
     dailyPrice: (row['daily_price'] as num?)?.toDouble(),
     photoBytes: _bytes(row['photo']),
     address: row['address'] as String,
+    district: _districtOf(row),
     handover: HandoverMethod.values.byName(row['handover'] as String),
   );
+}
+
+HkDistrict _districtOf(Map<String, Object?> row) {
+  final saved = row['district'];
+  if (saved is String && saved.isNotEmpty) return HkDistrict.byName(saved);
+  return switch (row['id']) {
+    'camp' => HkDistrict.shaTin,
+    'projector' => HkDistrict.yauTsimMong,
+    'washer' => HkDistrict.kwunTong,
+    'cookset' => HkDistrict.saiKung,
+    'cart' => HkDistrict.shamShuiPo,
+    _ => HkDistrict.kowloonCity,
+  };
 }
 
 Map<String, Object?> bookingToRow(Booking booking) {
@@ -362,6 +377,7 @@ ShareItem _withPhoto(ShareItem item, Uint8List? photo) {
     dailyPrice: item.dailyPrice,
     photoBytes: photo,
     address: item.address,
+    district: item.district,
     handover: item.handover,
   );
 }

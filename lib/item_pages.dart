@@ -62,6 +62,7 @@ class ItemDetailPage extends StatelessWidget {
               PriceChip(item: item),
               _Meta(text: item.category.label),
               _Meta(text: item.condition),
+              _Meta(text: item.district.label),
               _Meta(text: item.handover.label),
             ],
           ),
@@ -73,7 +74,7 @@ class ItemDetailPage extends StatelessWidget {
           const SizedBox(height: 16),
           InfoLine(
             icon: Icons.place_outlined,
-            text: '${item.address} · ${formatDistance(item.distanceMeters)}',
+            text: '${item.district.label} · ${item.address} · ${formatDistance(item.distanceMeters)}',
           ),
           InfoLine(
             icon: Icons.local_shipping_outlined,
@@ -397,10 +398,24 @@ class _ListItemPageState extends State<ListItemPage> {
   final _price = TextEditingController();
   final _address = TextEditingController();
   ItemCategory _category = ItemCategory.tool;
+  HkDistrict _district = HkDistrict.kowloonCity;
   String _condition = '良好';
   HandoverMethod _handover = HandoverMethod.faceToFace;
+  var _prefilled = false;
   Uint8List? _photo;
   String? _error;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_prefilled) return;
+    _prefilled = true;
+    final user = AccountScope.of(context).user;
+    if (_address.text.isEmpty && user.address.isNotEmpty) {
+      _address.text = user.address;
+    }
+    _district = user.district;
+  }
 
   @override
   void dispose() {
@@ -442,6 +457,7 @@ class _ListItemPageState extends State<ListItemPage> {
       dailyPrice: dailyPrice,
       photoBytes: photo,
       address: address,
+      district: _district,
       handover: _handover,
     );
     ShareKitScope.of(context).openTab(0);
@@ -525,6 +541,20 @@ class _ListItemPageState extends State<ListItemPage> {
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
             decoration: const InputDecoration(labelText: '每日租金（港元，可留空）'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final picked = await showHkDistrictSheet(
+                context,
+                includeAll: false,
+                selected: _district,
+              );
+              if (!mounted || picked?.district == null) return;
+              setState(() => _district = picked!.district!);
+            },
+            icon: const Icon(Icons.map_outlined),
+            label: Text('地區 · ${_district.label}'),
           ),
           const SizedBox(height: 12),
           TextField(

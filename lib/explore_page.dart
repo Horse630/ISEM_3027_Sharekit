@@ -15,7 +15,10 @@ class ExplorePage extends StatefulWidget {
 class _ExplorePageState extends State<ExplorePage> {
   final _query = TextEditingController();
   ItemCategory? _category;
+  HkDistrict? _district;
+  ItemSort _sort = ItemSort.nearest;
   bool _freeOnly = false;
+  bool _mineOnly = false;
 
   @override
   void dispose() {
@@ -26,11 +29,16 @@ class _ExplorePageState extends State<ExplorePage> {
   @override
   Widget build(BuildContext context) {
     final store = ShareKitScope.of(context);
+    final user = AccountScope.of(context).user;
     final results = store.search(
       query: _query.text,
       category: _category,
       freeOnly: _freeOnly,
+      district: _district,
+      owner: _mineOnly ? user.label : null,
+      sort: _sort,
     );
+    final place = _district?.label ?? '全港';
 
     return SafeArea(
       child: ListView(
@@ -46,7 +54,7 @@ class _ExplorePageState extends State<ExplorePage> {
           ),
           const SizedBox(height: 6),
           const Text(
-            '需要就借，不必先買。',
+            '先選地區，再借附近的人已經有的東西。',
             style: TextStyle(fontSize: 16, color: Color(0xFF3E4A44)),
           ),
           const SizedBox(height: 14),
@@ -84,19 +92,60 @@ class _ExplorePageState extends State<ExplorePage> {
                   selected: _freeOnly,
                   onTap: () => setState(() => _freeOnly = !_freeOnly),
                 ),
+                _FilterChip(
+                  label: '我的區 · ${user.district.label}',
+                  selected: _district == user.district,
+                  onTap: () => setState(() => _district = user.district),
+                ),
+                _FilterChip(
+                  label: '我的物品',
+                  selected: _mineOnly,
+                  onTap: () => setState(() => _mineOnly = !_mineOnly),
+                ),
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showHkDistrictSheet(
+                    context,
+                    includeAll: true,
+                    selected: _district,
+                  );
+                  if (!mounted || picked == null) return;
+                  setState(() => _district = picked.district);
+                },
+                icon: const Icon(Icons.map_outlined),
+                label: Text(_district?.label ?? '十八區'),
+              ),
+              for (final sort in ItemSort.values)
+                ChoiceChip(
+                  label: Text(sort.label),
+                  selected: _sort == sort,
+                  onSelected: (_) => setState(() => _sort = sort),
+                ),
+            ],
+          ),
           const SizedBox(height: 16),
           Text(
-            '${results.length} 件在附近',
+            '$place · ${results.length} 件',
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           if (results.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 28),
-              child: Text('這個社區暫時沒有符合的物品。可以換一個分類，或自己上架。'),
+            Padding(
+              padding: const EdgeInsets.only(top: 28),
+              child: Text(
+                _mineOnly
+                    ? '你還沒有上架物品。'
+                    : '這個地區暫時沒有符合的物品。可以改選其他區，或自己上架。',
+              ),
             )
           else if (MediaQuery.sizeOf(context).width >= 900)
             GridView.builder(
@@ -137,7 +186,7 @@ class _PilotCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '試點社區 · 九龍塘示範屋苑',
+            '香港十八區 · 社區借用',
             style: TextStyle(
               color: Color(0xFFE7F3EE),
               fontWeight: FontWeight.w700,
@@ -145,7 +194,7 @@ class _PilotCard extends StatelessWidget {
           ),
           SizedBox(height: 6),
           Text(
-            '電鑽、清潔機、露營裝備和活動桌椅，很多時一年只用幾次。附近已有人擁有，只是缺少一個安全、有紀錄的借用方式。',
+            '先揀你所在的區。電鑽、清潔機、露營裝備很多時一年只用幾次，附近已經有人擁有。',
             style: TextStyle(color: Color(0xFFD5E4DC), height: 1.4),
           ),
         ],
@@ -217,7 +266,7 @@ class _ItemCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${formatDistance(item.distanceMeters)} · ${item.condition} · ${item.owner}',
+                      '${item.district.label} · ${formatDistance(item.distanceMeters)} · ${item.condition}',
                       style: const TextStyle(
                         color: Color(0xFF5E6A64),
                         fontSize: 13,

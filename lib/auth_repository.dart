@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'catalog_gateway.dart';
 import 'database_factory.dart';
+import 'models.dart';
 import 'remote_api.dart';
 
 class AuthFailure implements Exception {
@@ -29,6 +30,8 @@ class AppUser {
     required this.verified,
     required this.communityJoined,
     this.photo,
+    this.address = '',
+    this.district = HkDistrict.kowloonCity,
   });
 
   final int id;
@@ -38,6 +41,8 @@ class AppUser {
   final bool verified;
   final bool communityJoined;
   final Uint8List? photo;
+  final String address;
+  final HkDistrict district;
 
   String get label => displayName.trim().isEmpty ? name : displayName.trim();
 }
@@ -98,7 +103,7 @@ class AuthRepository {
         p.join(await getDatabasesPath(), 'sharekit.db');
     _db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -110,7 +115,9 @@ class AuthRepository {
             verified INTEGER NOT NULL DEFAULT 0,
             display_name TEXT,
             community_joined INTEGER NOT NULL DEFAULT 0,
-            photo BLOB
+            photo BLOB,
+            address TEXT,
+            district TEXT
           )
         ''');
         await db.execute('''
@@ -151,6 +158,17 @@ class AuthRepository {
         }
         if (oldVersion < 3) await _createMessages(db);
         if (oldVersion < 4) await _createCatalog(db);
+        if (oldVersion < 5) {
+          await db.execute('ALTER TABLE users ADD COLUMN address TEXT');
+          await db.execute('ALTER TABLE users ADD COLUMN district TEXT');
+          final columns = await db.rawQuery('PRAGMA table_info(items)');
+          final hasDistrict = columns.any((row) => row['name'] == 'district');
+          if (!hasDistrict) {
+            await db.execute(
+              "ALTER TABLE items ADD COLUMN district TEXT NOT NULL DEFAULT 'kowloonCity'",
+            );
+          }
+        }
       },
     );
     await _seedDemoAccount();
@@ -163,7 +181,8 @@ class AuthRepository {
     final db = _database;
     final rows = await db.rawQuery('''
       SELECT users.id, users.name, users.display_name, users.contact,
-             users.verified, users.community_joined, users.photo
+             users.verified, users.community_joined, users.photo,
+             users.address, users.district
       FROM sessions
       JOIN users ON users.id = sessions.user_id
       WHERE sessions.id = 1
@@ -295,17 +314,25 @@ class AuthRepository {
     required int userId,
     required String displayName,
     Uint8List? photo,
+    String address = '',
+    HkDistrict district = HkDistrict.kowloonCity,
   }) async {
     if (_useRemote) {
       return _remoteUpdateProfile(
         userId: userId,
         displayName: displayName,
         photo: photo,
+        address: address,
+        district: district,
       );
     }
     final name = displayName.trim();
     if (name.isEmpty) throw AuthFailure('請填顯示名稱。');
-    final values = <String, Object?>{'display_name': name};
+    final values = <String, Object?>{
+      'display_name': name,
+      'address': address.trim(),
+      'district': district.name,
+    };
     if (photo != null) values['photo'] = photo;
     await _database.update('users', values, where: 'id = ?', whereArgs: [userId]);
     final rows = await _database.query(
@@ -374,7 +401,8 @@ class AuthRepository {
         daily_price REAL,
         photo BLOB,
         address TEXT NOT NULL,
-        handover TEXT NOT NULL
+        handover TEXT NOT NULL,
+        district TEXT NOT NULL DEFAULT 'kowloonCity'
       )
     ''');
     await db.execute('''
@@ -567,12 +595,16 @@ class AuthRepository {
     required int userId,
     required String displayName,
     Uint8List? photo,
+    required String address,
+    required HkDistrict district,
   }) async {
     final name = displayName.trim();
     if (name.isEmpty) throw AuthFailure('請填顯示名稱。');
     await _loadRemoteUsers();
     final row = _remoteById(userId);
     row['display_name'] = name;
+    row['address'] = address.trim();
+    row['district'] = district.name;
     if (photo != null) {
       final shrunk = shrinkPhotoBytes(photo);
       row['photo'] = shrunk == null ? '' : base64Encode(shrunk);
@@ -638,6 +670,8 @@ class AuthRepository {
       verified: _flag(row['verified']),
       communityJoined: _flag(row['community_joined']),
       photo: _photoOf(row['photo']),
+      address: (row['address'] as String?) ?? '',
+      district: HkDistrict.byName(row['district'] as String?),
     );
   }
 
@@ -700,6 +734,8 @@ class AuthRepository {
       verified: (row['verified'] as int? ?? 0) == 1,
       communityJoined: (row['community_joined'] as int? ?? 0) == 1,
       photo: photo is Uint8List ? photo : null,
+      address: (row['address'] as String?) ?? '',
+      district: HkDistrict.byName(row['district'] as String?),
     );
   }
 
