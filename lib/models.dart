@@ -126,7 +126,21 @@ extension ItemCategoryX on ItemCategory {
   };
 }
 
-enum BookingStage { reserved, pickedUp, returned, reviewed }
+enum PayMethod { online, face }
+
+extension PayMethodX on PayMethod {
+  String get label => switch (this) {
+    PayMethod.online => '線上付款',
+    PayMethod.face => '當面付款',
+  };
+
+  String get en => switch (this) {
+    PayMethod.online => 'Pay online',
+    PayMethod.face => 'Pay in person',
+  };
+}
+
+enum BookingStage { requested, rejected, reserved, pickedUp, returned, reviewed }
 
 enum HandoverMethod { faceToFace, mail }
 
@@ -162,21 +176,34 @@ extension DepositStatusX on DepositStatus {
 
 extension BookingStageX on BookingStage {
   String get label => switch (this) {
-    BookingStage.reserved => '待取件',
+    BookingStage.requested => '待物主確認',
+    BookingStage.rejected => '已拒絕',
+    BookingStage.reserved => '待交接',
     BookingStage.pickedUp => '使用中',
-    BookingStage.returned => '待評價',
+    BookingStage.returned => '已歸還',
     BookingStage.reviewed => '已完成',
   };
 
   String get en => switch (this) {
-    BookingStage.reserved => 'To pick up',
+    BookingStage.requested => 'Waiting for the owner',
+    BookingStage.rejected => 'Rejected',
+    BookingStage.reserved => 'Ready to hand over',
     BookingStage.pickedUp => 'In use',
-    BookingStage.returned => 'To review',
+    BookingStage.returned => 'Returned',
     BookingStage.reviewed => 'Done',
   };
 
+  int get trackStep => switch (this) {
+    BookingStage.requested || BookingStage.rejected || BookingStage.reserved => 0,
+    BookingStage.pickedUp => 1,
+    BookingStage.returned => 2,
+    BookingStage.reviewed => 3,
+  };
+
   bool get blocksDates =>
-      this == BookingStage.reserved || this == BookingStage.pickedUp;
+      this == BookingStage.requested ||
+      this == BookingStage.reserved ||
+      this == BookingStage.pickedUp;
 }
 
 class ShareItem {
@@ -254,6 +281,7 @@ class Booking {
     required this.stage,
     required this.pickupCode,
     required this.note,
+    this.payMethod = PayMethod.online,
     this.deposit = DepositStatus.none,
     this.borrower = '',
     this.returnCondition,
@@ -269,6 +297,7 @@ class Booking {
   final BookingStage stage;
   final String pickupCode;
   final String note;
+  final PayMethod payMethod;
   final DepositStatus deposit;
   final String borrower;
   final String? returnCondition;
@@ -281,6 +310,7 @@ class Booking {
   Booking copyWith({
     BookingStage? stage,
     DepositStatus? deposit,
+    PayMethod? payMethod,
     String? returnCondition,
     int? stars,
     String? comment,
@@ -295,6 +325,7 @@ class Booking {
       stage: stage ?? this.stage,
       pickupCode: pickupCode,
       note: note,
+      payMethod: payMethod ?? this.payMethod,
       deposit: deposit ?? this.deposit,
       borrower: borrower ?? this.borrower,
       returnCondition: returnCondition ?? this.returnCondition,

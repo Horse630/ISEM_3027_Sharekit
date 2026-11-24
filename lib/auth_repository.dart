@@ -55,6 +55,8 @@ class ChatMessage {
     required this.body,
     required this.createdAt,
     this.photo,
+    this.kind = 'text',
+    this.bookingId = '',
   });
 
   final int id;
@@ -63,6 +65,8 @@ class ChatMessage {
   final String body;
   final DateTime createdAt;
   final Uint8List? photo;
+  final String kind;
+  final String bookingId;
 }
 
 class VerificationChallenge {
@@ -105,7 +109,7 @@ class AuthRepository {
         p.join(await getDatabasesPath(), 'sharekit.db');
     _db = await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -185,6 +189,21 @@ class AuthRepository {
           final hasPhoto = columns.any((row) => row['name'] == 'photo');
           if (!hasPhoto) {
             await db.execute('ALTER TABLE messages ADD COLUMN photo BLOB');
+          }
+        }
+        if (oldVersion < 8) {
+          final bookingColumns = await db.rawQuery('PRAGMA table_info(bookings)');
+          if (!bookingColumns.any((row) => row['name'] == 'pay_method')) {
+            await db.execute(
+              "ALTER TABLE bookings ADD COLUMN pay_method TEXT NOT NULL DEFAULT 'online'",
+            );
+          }
+          final messageColumns = await db.rawQuery('PRAGMA table_info(messages)');
+          if (!messageColumns.any((row) => row['name'] == 'kind')) {
+            await db.execute("ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'");
+          }
+          if (!messageColumns.any((row) => row['name'] == 'booking_id')) {
+            await db.execute("ALTER TABLE messages ADD COLUMN booking_id TEXT NOT NULL DEFAULT ''");
           }
         }
       },
@@ -434,6 +453,7 @@ class AuthRepository {
         note TEXT NOT NULL,
         deposit TEXT NOT NULL,
         borrower TEXT NOT NULL DEFAULT '',
+        pay_method TEXT NOT NULL DEFAULT 'online',
         return_condition TEXT,
         stars INTEGER,
         comment TEXT,
@@ -456,7 +476,9 @@ class AuthRepository {
         sender TEXT NOT NULL,
         body TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        photo BLOB
+        photo BLOB,
+        kind TEXT NOT NULL DEFAULT 'text',
+        booking_id TEXT NOT NULL DEFAULT ''
       )
     ''');
   }
@@ -488,6 +510,8 @@ class AuthRepository {
           body: row['body'] as String,
           createdAt: DateTime.parse(row['created_at'] as String),
           photo: _photoOf(row['photo']),
+          kind: (row['kind'] as String?) ?? 'text',
+          bookingId: (row['booking_id'] as String?) ?? '',
         ),
     ];
   }
@@ -497,6 +521,8 @@ class AuthRepository {
     required String sender,
     required String body,
     Uint8List? photo,
+    String kind = 'text',
+    String bookingId = '',
   }) async {
     if (_useRemote) {
       return _remoteSendMessage(
@@ -504,6 +530,8 @@ class AuthRepository {
         sender: sender,
         body: body,
         photo: photo,
+        kind: kind,
+        bookingId: bookingId,
       );
     }
     final text = body.trim();
@@ -515,6 +543,8 @@ class AuthRepository {
       'body': text,
       'created_at': DateTime.now().toIso8601String(),
       'photo': shrunk,
+      'kind': kind,
+      'booking_id': bookingId,
     });
   }
 
@@ -680,6 +710,8 @@ class AuthRepository {
             createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ??
                 DateTime.now(),
             photo: _photoOf(row['photo']),
+            kind: (row['kind'] as String?) ?? 'text',
+            bookingId: (row['booking_id'] as String?) ?? '',
           ),
     ]..sort((a, b) => a.id.compareTo(b.id));
     return messages;
@@ -690,6 +722,8 @@ class AuthRepository {
     required String sender,
     required String body,
     Uint8List? photo,
+    String kind = 'text',
+    String bookingId = '',
   }) async {
     final text = body.trim();
     final shrunk = shrinkPhotoBytes(photo);
@@ -700,6 +734,8 @@ class AuthRepository {
       'sender': sender,
       'body': text,
       'photo': shrunk == null ? '' : base64Encode(shrunk),
+      'kind': kind,
+      'booking_id': bookingId,
       'created_at': DateTime.now().toIso8601String(),
     });
   }

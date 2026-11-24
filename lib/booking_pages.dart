@@ -153,7 +153,8 @@ class BookingDetailPage extends StatelessWidget {
             text:
                 '${formatDate(booking.start)} 至 ${formatDate(booking.end)} · ${booking.days} 日',
           ),
-          InfoLine(icon: Icons.handshake_outlined, text: booking.note),
+          if (booking.note.trim().isNotEmpty && booking.note != '在屋苑會所大堂交接')
+            InfoLine(icon: Icons.handshake_outlined, text: booking.note),
           InfoLine(
             icon: Icons.payments_outlined,
             text: quote.free
@@ -173,8 +174,7 @@ class BookingDetailPage extends StatelessWidget {
               icon: Icons.report_outlined,
               text: tr(context, '問題回報：${booking.issue}', 'Issue: ${booking.issue}'),
             ),
-          if (booking.stage == BookingStage.reserved &&
-              booking.deposit != DepositStatus.pending) ...[
+          if (store.codeReady(booking)) ...[
             const SizedBox(height: 8),
             _CodeBox(code: booking.pickupCode),
           ],
@@ -272,45 +272,37 @@ class _ActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = ShareKitScope.of(context);
     final booking = store.bookingById(bookingId);
-    if (booking.stage == BookingStage.reserved &&
-        booking.deposit == DepositStatus.pending) {
+    final user = AccountScope.of(context).user;
+    final item = store.findItem(booking.itemId);
+    final isOwner = item != null && (item.owner == user.label || item.owner == user.name);
+    if (!isOwner && store.needsOnlinePayment(booking)) {
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: FilledButton(
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => DepositPage(bookingId: bookingId),
-                ),
+                MaterialPageRoute(builder: (_) => DepositPage(bookingId: bookingId)),
               );
             },
-            child: Text(tr(context, '支付按金', 'Pay deposit')),
+            child: Text(tr(context, '完成付款', 'Pay now')),
           ),
         ),
       );
     }
-    final (zh, en, action) = switch (stage) {
-      BookingStage.reserved => (
-        '確認已取件',
-        'Confirm pickup',
+    if (!isOwner) return const SizedBox.shrink();
+    final (zh, en, action) = switch (booking.stage) {
+      BookingStage.reserved when store.codeReady(booking) => (
+        '確認已借出',
+        'Confirm handed over',
         () => store.markPickedUp(bookingId),
       ),
       BookingStage.pickedUp => (
         '確認歸還',
         'Confirm return',
-        () => _returnSheet(context),
+        () => store.markReturned(bookingId, '完好'),
       ),
-      BookingStage.returned => (
-        '撰寫評價',
-        'Write a review',
-        () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => ReviewPage(bookingId: bookingId)),
-          );
-        },
-      ),
-      BookingStage.reviewed => (null, null, null),
+      _ => (null, null, null),
     };
     if (zh == null || en == null || action == null) return const SizedBox.shrink();
     return SafeArea(

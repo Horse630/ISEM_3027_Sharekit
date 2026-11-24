@@ -207,6 +207,7 @@ class ShareStore extends ChangeNotifier {
     required DateTime end,
     required String note,
     required String borrower,
+    required PayMethod payMethod,
   }) {
     final from = dateOnly(start);
     final to = dateOnly(end);
@@ -215,21 +216,57 @@ class ShareStore extends ChangeNotifier {
     if (item == null) return null;
     if (borrower == item.owner) return null;
     _sequence += 1;
+    final needsPay = payMethod == PayMethod.online && !item.isFree;
     final booking = Booking(
       id: 'SK-$_sequence',
       itemId: itemId,
       start: from,
       end: to,
-      stage: BookingStage.reserved,
+      stage: BookingStage.requested,
       pickupCode: (_sequence * 37 % 9000 + 1000).toString(),
-      note: note.trim().isEmpty ? '在屋苑會所大堂交接' : note.trim(),
-      deposit: item.isFree ? DepositStatus.none : DepositStatus.pending,
+      note: note.trim(),
+      payMethod: payMethod,
+      deposit: needsPay ? DepositStatus.pending : DepositStatus.none,
       borrower: borrower,
     );
     _bookings.add(booking);
     notifyListeners();
     _persist();
     return booking;
+  }
+
+  void acceptBooking(String bookingId) {
+    final booking = bookingById(bookingId);
+    if (booking.stage != BookingStage.requested) return;
+    _update(bookingId, (current) => current.copyWith(stage: BookingStage.reserved));
+  }
+
+  void rejectBooking(String bookingId, String reason) {
+    final booking = bookingById(bookingId);
+    if (booking.stage != BookingStage.requested) return;
+    _update(
+      bookingId,
+      (current) => current.copyWith(
+        stage: BookingStage.rejected,
+        issue: reason.trim(),
+      ),
+    );
+  }
+
+  bool needsOnlinePayment(Booking booking) {
+    final item = findItem(booking.itemId);
+    if (item == null || item.isFree) return false;
+    return booking.payMethod == PayMethod.online &&
+        booking.deposit == DepositStatus.pending &&
+        booking.stage == BookingStage.reserved;
+  }
+
+  bool codeReady(Booking booking) {
+    if (booking.stage == BookingStage.requested ||
+        booking.stage == BookingStage.rejected) {
+      return false;
+    }
+    return !needsOnlinePayment(booking);
   }
 
   void payDeposit(String bookingId) {

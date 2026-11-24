@@ -139,6 +139,7 @@ class _ThreadTile extends StatelessWidget {
                 ownerName: owner,
                 senderName: user.label,
                 center: center,
+                store: store,
               ),
             ),
           );

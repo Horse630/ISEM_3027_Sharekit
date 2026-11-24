@@ -72,7 +72,7 @@ class StageTrack extends StatelessWidget {
       tr(context, '歸還', 'Return'),
       tr(context, '評價', 'Review'),
     ];
-    final active = stage.index;
+    final active = stage.trackStep;
     return Row(
       children: [
         for (var i = 0; i < labels.length; i++) ...[

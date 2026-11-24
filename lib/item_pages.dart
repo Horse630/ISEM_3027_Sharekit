@@ -22,6 +22,8 @@ class ItemDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = ShareKitScope.of(context);
     final item = store.itemById(itemId);
+    final user = AccountScope.of(context).user;
+    final mine = item.owner == user.label || item.owner == user.name;
     return Scaffold(
       appBar: AppBar(title: Text(tr(context, '物品詳情', 'Item'))),
       body: ListView(
@@ -148,27 +150,30 @@ class ItemDetailPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: Row(
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    final account = AccountScope.of(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ChatPage(
-                          auth: account.auth,
-                          itemId: item.id,
-                          itemName: item.name,
-                          ownerName: item.owner,
-                          senderName: account.user.label,
-                          center: ChatScope.maybeOf(context),
+              if (!mine) ...[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      final account = AccountScope.of(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ChatPage(
+                            auth: account.auth,
+                            itemId: item.id,
+                            itemName: item.name,
+                            ownerName: item.owner,
+                            senderName: account.user.label,
+                            center: ChatScope.maybeOf(context),
+                            store: store,
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                  child: Text(tr(context, '聯絡物主', 'Message')),
+                      );
+                    },
+                    child: Text(tr(context, '聯絡物主', 'Message')),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
+                const SizedBox(width: 10),
+              ],
               Expanded(child: _ownerAction(context, store, item)),
             ],
           ),
@@ -302,6 +307,7 @@ class _BookPageState extends State<BookPage> {
   final _note = TextEditingController();
   String? _error;
   var _datesReady = false;
+  PayMethod _pay = PayMethod.online;
 
   @override
   void initState() {
@@ -347,9 +353,10 @@ class _BookPageState extends State<BookPage> {
     _end = open;
   }
 
-  void _confirm() {
+  Future<void> _confirm() async {
     final store = ShareKitScope.of(context);
-    final user = AccountScope.of(context).user;
+    final account = AccountScope.of(context);
+    final user = account.user;
     final item = store.findItem(widget.itemId);
     if (item == null) {
       setState(() => _error = tr(context, '這件物品已下架。', 'This item was removed.'));
@@ -365,6 +372,7 @@ class _BookPageState extends State<BookPage> {
       end: _end,
       note: _note.text,
       borrower: user.label,
+      payMethod: _pay,
     );
     if (booking == null) {
       setState(() => _error = tr(
@@ -374,10 +382,36 @@ class _BookPageState extends State<BookPage> {
       ));
       return;
     }
-    store.openTab(2);
+    final note = _note.text.trim();
+    final lines = [
+      tr(context, '租借申請', 'Rental request'),
+      '${tr(context, '物品', 'Item')}：${item.name}',
+      '${tr(context, '租借人', 'Renter')}：${user.label}',
+      '${tr(context, '日期', 'Dates')}：${formatDate(booking.start)} – ${formatDate(booking.end)}',
+      '${tr(context, '付款', 'Payment')}：${tr(context, _pay.label, _pay.en)}',
+      '${tr(context, '租金', 'Rent')}：${item.isFree ? tr(context, '免費', 'Free') : money(quoteFor(item, booking.start, booking.end).rent)}',
+      if (note.isNotEmpty) '${tr(context, '備註', 'Note')}：$note',
+    ];
+    await account.auth.sendMessage(
+      itemId: item.id,
+      sender: user.label,
+      body: lines.join('\n'),
+      kind: 'request',
+      bookingId: booking.id,
+    );
+    if (!mounted) return;
+    store.openTab(1);
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => BookingDetailPage(bookingId: booking.id),
+        builder: (_) => ChatPage(
+          auth: account.auth,
+          itemId: item.id,
+          itemName: item.name,
+          ownerName: item.owner,
+          senderName: user.label,
+          center: ChatScope.maybeOf(context),
+          store: store,
+        ),
       ),
       (route) => route.isFirst,
     );
@@ -435,6 +469,20 @@ class _BookPageState extends State<BookPage> {
             decoration: InputDecoration(
               hintText: tr(context, '例如：星期六下午 3 時，會所大堂', 'For example: Saturday 3pm, clubhouse lobby'),
             ),
+          ),
+          const SizedBox(height: 18),
+          Text(tr(context, '付款方式', 'How to pay'), style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final method in PayMethod.values)
+                ChoiceChip(
+                  label: Text(tr(context, method.label, method.en)),
+                  selected: _pay == method,
+                  onSelected: (_) => setState(() => _pay = method),
+                ),
+            ],
           ),
           const SizedBox(height: 18),
           Text(tr(context, '費用', 'Cost'), style: const TextStyle(fontWeight: FontWeight.w800)),

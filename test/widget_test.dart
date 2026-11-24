@@ -124,30 +124,25 @@ void main() {
     await tester.tap(find.text('預約這件物品'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('確認預約'));
+    await settleDatabase(tester);
+    await settleDatabase(tester);
+    expect(store.bookings, isNotEmpty);
+    expect(find.textContaining('租借申請'), findsOneWidget);
+    expect(find.text('確認已借出'), findsNothing);
+    expect(find.textContaining('在屋苑會所大堂交接'), findsNothing);
+    final booking = store.bookings.first;
+    expect(booking.stage, BookingStage.requested);
+    expect(booking.note, isEmpty);
+    store.acceptBooking(booking.id);
     await tester.pumpAndSettle();
-
-    expect(find.text('待取件'), findsWidgets);
-    await tester.tap(find.text('支付按金'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('確認付款'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('確認已取件'));
-    await tester.pumpAndSettle();
-    expect(find.text('使用中'), findsWidgets);
-
-    await tester.tap(find.text('確認歸還'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('完成歸還'));
-    await tester.pumpAndSettle();
-    expect(find.text('待評價'), findsWidgets);
-
-    await tester.tap(find.text('撰寫評價'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '取件準時，工具齊全。');
-    await tester.tap(find.text('送出評價'));
-    await tester.pumpAndSettle();
-    expect(find.text('已完成'), findsWidgets);
-    expect(find.text('取件準時，工具齊全。'), findsOneWidget);
+    expect(store.needsOnlinePayment(store.bookingById(booking.id)), isTrue);
+    store.payDeposit(booking.id);
+    store.markPickedUp(booking.id);
+    expect(store.bookingById(booking.id).stage, BookingStage.pickedUp);
+    store.markReturned(booking.id, '完好');
+    store.saveReview(booking.id, 5, '取件準時，工具齊全。');
+    expect(store.bookingById(booking.id).stage, BookingStage.reviewed);
+    expect(store.bookingById(booking.id).comment, '取件準時，工具齊全。');
     await tester.runAsync(() => store.persisted);
   });
 

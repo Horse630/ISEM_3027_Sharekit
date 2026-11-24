@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'auth_repository.dart';
 import 'catalog_gateway.dart';
 import 'chat_center.dart';
+import 'models.dart';
+import 'store.dart';
 import 'text.dart';
 import 'widgets.dart';
 
@@ -19,6 +21,7 @@ class ChatPage extends StatefulWidget {
     required this.ownerName,
     required this.senderName,
     this.center,
+    this.store,
   });
 
   final AuthRepository auth;
@@ -27,6 +30,7 @@ class ChatPage extends StatefulWidget {
   final String ownerName;
   final String senderName;
   final ChatCenter? center;
+  final ShareStore? store;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -123,6 +127,10 @@ class _ChatPageState extends State<ChatPage> {
                             _Bubble(
                               message: message,
                               mine: message.sender == widget.senderName,
+                              isOwner: widget.senderName == widget.ownerName,
+                              store: widget.store,
+                              auth: widget.auth,
+                              onChanged: _load,
                             ),
                         ],
                       ),
@@ -188,51 +196,261 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.mine});
+  const _Bubble({
+    required this.message,
+    required this.mine,
+    required this.isOwner,
+    required this.auth,
+    required this.onChanged,
+    this.store,
+  });
 
   final ChatMessage message;
   final bool mine;
+  final bool isOwner;
+  final ShareStore? store;
+  final AuthRepository auth;
+  final Future<void> Function() onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: const BoxConstraints(maxWidth: 320),
-        decoration: BoxDecoration(
-          color: mine ? const Color(0xFF0E6B52) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (message.photo != null)
-              GestureDetector(
-                onTap: () => showFullPhoto(context, message.photo!),
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: message.body.isEmpty ? 0 : 8),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.memory(
-                      message.photo!,
-                      width: 220,
-                      fit: BoxFit.cover,
+    final actions = _actions(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Align(
+            alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              constraints: const BoxConstraints(maxWidth: 320),
+              decoration: BoxDecoration(
+                color: mine ? const Color(0xFF0E6B52) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (message.photo != null)
+                    GestureDetector(
+                      onTap: () => showFullPhoto(context, message.photo!),
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: message.body.isEmpty ? 0 : 8),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.memory(message.photo!, width: 220, fit: BoxFit.cover),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  if (message.body.isNotEmpty)
+                    Text(
+                      message.body,
+                      style: TextStyle(color: mine ? Colors.white : const Color(0xFF1B2A24)),
+                    ),
+                ],
               ),
-            if (message.body.isNotEmpty)
-              Text(
-                message.body,
-                style: TextStyle(
-                  color: mine ? Colors.white : const Color(0xFF1B2A24),
-                ),
-              ),
+            ),
+          ),
+          if (actions != null) ...[
+            const SizedBox(height: 6),
+            actions,
           ],
-        ),
+        ],
       ),
     );
+  }
+
+  Widget? _actions(BuildContext context) {
+    final catalog = store;
+    if (catalog == null || message.bookingId.isEmpty) return null;
+    Booking? booking;
+    for (final item in catalog.bookings) {
+      if (item.id == message.bookingId) booking = item;
+    }
+    if (booking == null) return null;
+    if (message.kind == 'request' && isOwner && booking.stage == BookingStage.requested) {
+      return Wrap(
+        spacing: 8,
+        children: [
+          FilledButton(
+            onPressed: () => _accept(context, catalog, booking!),
+            child: Text(tr(context, '同意', 'Accept')),
+          ),
+          OutlinedButton(
+            onPressed: () => _reject(context, catalog, booking!),
+            child: Text(tr(context, '拒絕', 'Reject')),
+          ),
+        ],
+      );
+    }
+    if (message.kind == 'pay' && !isOwner && catalog.needsOnlinePayment(booking)) {
+      return FilledButton(
+        onPressed: () => _pay(context, catalog, booking!),
+        child: Text(tr(context, '完成付款', 'Pay now')),
+      );
+    }
+    if (message.kind == 'code' &&
+        isOwner &&
+        booking.stage == BookingStage.reserved &&
+        catalog.codeReady(booking)) {
+      return FilledButton(
+        onPressed: () => _handedOver(context, catalog, booking!),
+        child: Text(tr(context, '確認已借出', 'Confirm handed over')),
+      );
+    }
+    if (message.kind == 'rented' && isOwner && booking.stage == BookingStage.pickedUp) {
+      return FilledButton(
+        onPressed: () => _returned(context, catalog, booking!),
+        child: Text(tr(context, '確認歸還', 'Confirm return')),
+      );
+    }
+    if (message.kind == 'returned' &&
+        booking.stage == BookingStage.returned &&
+        (booking.comment ?? '').isEmpty) {
+      return OutlinedButton(
+        onPressed: () => _comment(context, catalog, booking!),
+        child: Text(tr(context, '寫評價（可留空）', 'Add a review (optional)')),
+      );
+    }
+    return null;
+  }
+
+  String _owner(ShareStore catalog, Booking booking) {
+    return catalog.findItem(booking.itemId)?.owner ?? '';
+  }
+
+  Future<void> _accept(BuildContext context, ShareStore catalog, Booking booking) async {
+    catalog.acceptBooking(booking.id);
+    final latest = catalog.bookingById(booking.id);
+    final needsPay = catalog.needsOnlinePayment(latest);
+    await auth.sendMessage(
+      itemId: booking.itemId,
+      sender: _owner(catalog, booking),
+      body: [
+        tr(context, '物主已同意這次租借。', 'The owner accepted this rental.'),
+        if (needsPay)
+          tr(context, '請按下面按鈕完成付款。', 'Tap below to pay.')
+        else
+          '${tr(context, '交接碼', 'Exchange code')}：${latest.pickupCode}',
+      ].join('\n'),
+      kind: needsPay ? 'pay' : 'code',
+      bookingId: booking.id,
+    );
+    await onChanged();
+  }
+
+  Future<void> _reject(BuildContext context, ShareStore catalog, Booking booking) async {
+    final reason = TextEditingController();
+    final why = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr(context, '為什麼拒絕？', 'Why reject?')),
+        content: TextField(
+          controller: reason,
+          decoration: InputDecoration(hintText: tr(context, '可以留空', 'You can leave this blank')),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(tr(context, '取消', 'Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, reason.text.trim()),
+            child: Text(tr(context, '拒絕', 'Reject')),
+          ),
+        ],
+      ),
+    );
+    reason.dispose();
+    if (why == null) return;
+    catalog.rejectBooking(booking.id, why);
+    await auth.sendMessage(
+      itemId: booking.itemId,
+      sender: _owner(catalog, booking),
+      body: [
+        tr(context, '你的租借已被拒絕。', 'Your rental was rejected.'),
+        if (why.isNotEmpty) '${tr(context, '原因', 'Reason')}：$why',
+      ].join('\n'),
+      kind: 'rejected',
+      bookingId: booking.id,
+    );
+    await onChanged();
+  }
+
+  Future<void> _pay(BuildContext context, ShareStore catalog, Booking booking) async {
+    catalog.payDeposit(booking.id);
+    final latest = catalog.bookingById(booking.id);
+    await auth.sendMessage(
+      itemId: booking.itemId,
+      sender: booking.borrower,
+      body: [
+        tr(context, '租金已付。', 'The rent is paid.'),
+        '${tr(context, '交接碼', 'Exchange code')}：${latest.pickupCode}',
+      ].join('\n'),
+      kind: 'code',
+      bookingId: booking.id,
+    );
+    await onChanged();
+  }
+
+  Future<void> _handedOver(BuildContext context, ShareStore catalog, Booking booking) async {
+    catalog.markPickedUp(booking.id);
+    await auth.sendMessage(
+      itemId: booking.itemId,
+      sender: _owner(catalog, booking),
+      body: [
+        tr(context, '物主已確認交件。', 'The owner confirmed the handover.'),
+        '${tr(context, '交接碼', 'Exchange code')}：${booking.pickupCode}',
+      ].join('\n'),
+      kind: 'rented',
+      bookingId: booking.id,
+    );
+    await onChanged();
+  }
+
+  Future<void> _returned(BuildContext context, ShareStore catalog, Booking booking) async {
+    catalog.markReturned(booking.id, '完好');
+    await auth.sendMessage(
+      itemId: booking.itemId,
+      sender: _owner(catalog, booking),
+      body: tr(
+        context,
+        '已確認歸還。可以留下評價，也可以不寫。',
+        'Return confirmed. A review is optional.',
+      ),
+      kind: 'returned',
+      bookingId: booking.id,
+    );
+    await onChanged();
+  }
+
+  Future<void> _comment(BuildContext context, ShareStore catalog, Booking booking) async {
+    final text = TextEditingController();
+    final comment = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr(context, '評價（可留空）', 'Review (optional)')),
+        content: TextField(
+          controller: text,
+          maxLines: 3,
+          decoration: InputDecoration(hintText: tr(context, '可以留空', 'You can leave this blank')),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, ''),
+            child: Text(tr(context, '略過', 'Skip')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, text.text.trim()),
+            child: Text(tr(context, '送出', 'Send')),
+          ),
+        ],
+      ),
+    );
+    text.dispose();
+    if (comment == null || comment.isEmpty) return;
+    catalog.saveReview(booking.id, 5, comment);
+    await onChanged();
   }
 }
