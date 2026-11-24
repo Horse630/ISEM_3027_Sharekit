@@ -1,6 +1,7 @@
 """ShareKit API. Reads MongoDB credentials from atlas-credentials.env."""
 
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -23,10 +24,17 @@ def load_env(path):
     return values
 
 
+def mongodb_uri():
+    uri = os.environ.get("MONGODB_URI", "").strip()
+    if uri:
+        return uri
+    if ENV_PATH.is_file():
+        return load_env(ENV_PATH).get("MONGODB_URI", "")
+    return ""
+
+
 def connect():
-    if not ENV_PATH.is_file():
-        raise SystemExit("Missing atlas-credentials.env")
-    uri = load_env(ENV_PATH).get("MONGODB_URI", "")
+    uri = mongodb_uri()
     if not uri:
         raise SystemExit("MONGODB_URI is missing")
     client = MongoClient(uri, serverSelectionTimeoutMS=8000)
@@ -134,5 +142,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print("ShareKit MongoDB API on http://127.0.0.1:8780", flush=True)
-    ThreadingHTTPServer(("127.0.0.1", 8780), Handler).serve_forever()
+    port = int(os.environ.get("PORT", "8780"))
+    print(f"ShareKit MongoDB API listening on port {port}", flush=True)
+    ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
