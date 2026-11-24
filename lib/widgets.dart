@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import 'models.dart';
@@ -46,7 +48,7 @@ class PriceChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        item.priceLabel,
+        priceText(context, item),
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w700,
@@ -64,7 +66,12 @@ class StageTrack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const labels = ['預約', '取件', '歸還', '評價'];
+    final labels = [
+      tr(context, '預約', 'Book'),
+      tr(context, '取件', 'Pickup'),
+      tr(context, '歸還', 'Return'),
+      tr(context, '評價', 'Review'),
+    ];
     final active = stage.index;
     return Row(
       children: [
@@ -141,9 +148,9 @@ Future<DistrictFilter?> showHkDistrictSheet(
           child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           children: [
-            const Text(
-              '香港十八區',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            Text(
+              tr(context, '香港十八區', '18 districts'),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
             if (includeAll)
@@ -185,6 +192,26 @@ Future<DistrictFilter?> showHkDistrictSheet(
         ),
       );
     },
+  );
+}
+
+void showFullPhoto(BuildContext context, Uint8List bytes) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: Text(tr(context, '相片', 'Photo')),
+        ),
+        body: InteractiveViewer(
+          minScale: 1,
+          maxScale: 4,
+          child: Center(child: Image.memory(bytes)),
+        ),
+      ),
+    ),
   );
 }
 

@@ -105,9 +105,9 @@ class _ShareKitAppState extends State<ShareKitApp> {
   Widget build(BuildContext context) {
     final Widget home;
     if (_loading) {
-      home = const Scaffold(body: Center(child: Text('正在開啟資料庫…')));
+      home = Scaffold(body: Center(child: Text(tr(context, '正在開啟資料庫…', 'Opening the database…'))));
     } else if (_error != null) {
-      home = Scaffold(body: Center(child: Text('資料庫打不開：$_error')));
+      home = Scaffold(body: Center(child: Text(tr(context, '資料庫打不開：$_error', 'The database did not open: $_error'))));
     } else if (_user == null) {
       home = LoginPage(
         auth: _auth,
@@ -437,7 +437,7 @@ class _AccountBar extends StatelessWidget {
                   ),
                 ),
               ),
-              TextButton(onPressed: onLogout, child: const Text('登出')),
+              TextButton(onPressed: onLogout, child: Text(tr(context, '登出', 'Log out'))),
             ],
           ),
         ),

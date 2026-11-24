@@ -20,6 +20,19 @@ String tr(BuildContext context, String zh, String en) {
   return AppLang.of(context) ? en : zh;
 }
 
+String shown(BuildContext context, String message) {
+  if (!AppLang.of(context)) return message;
+  return switch (message) {
+    '請先驗證電郵或電話。' => 'Verify your email or phone first.',
+    '請填名稱、密碼和電郵或電話。' => 'Enter a name, password, and email or phone.',
+    '這個名稱已經有人用了。' => 'That name is already taken.',
+    '找不到這個帳號。' => 'That account was not found.',
+    '驗證碼不對。' => 'That code is wrong.',
+    '請填顯示名稱。' => 'Enter a display name.',
+    _ => message,
+  };
+}
+
 String districtLabel(BuildContext context, HkDistrict district) {
   return tr(context, district.label, district.en);
 }
@@ -46,4 +59,30 @@ String depositLabel(BuildContext context, DepositStatus status) {
 
 String sortLabel(BuildContext context, ItemSort sort) {
   return tr(context, sort.label, sort.en);
+}
+
+String priceText(BuildContext context, ShareItem item) {
+  if (item.isFree) return tr(context, '免費借用', 'Free to borrow');
+  final amount = money(item.dailyPrice!);
+  return tr(context, '每日 $amount', '$amount / day');
+}
+
+String distanceText(BuildContext context, int meters) {
+  if (meters >= 1000) {
+    final km = (meters / 1000).toStringAsFixed(1);
+    return tr(context, '$km 公里', '$km km');
+  }
+  return tr(context, '$meters 米', '$meters m');
+}
+
+String conditionLabel(BuildContext context, String condition) {
+  return switch (condition) {
+    '全新' => tr(context, '全新', 'New'),
+    '良好' => tr(context, '良好', 'Good'),
+    '有使用痕跡' => tr(context, '有使用痕跡', 'Used'),
+    '完好' => tr(context, '完好', 'Fine'),
+    '有輕微使用痕跡' => tr(context, '有輕微使用痕跡', 'Light wear'),
+    '需要物主再檢查' => tr(context, '需要物主再檢查', 'Owner should check'),
+    _ => condition,
+  };
 }

@@ -19,15 +19,15 @@ class BookingsPage extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
-          const Text(
-            '我的預約',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+          Text(
+            tr(context, '我的預約', 'My bookings'),
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
-          const Text('取件、歸還和評價都留在同一張預約裡。'),
+          Text(tr(context, '取件、歸還和評價都留在同一張預約裡。', 'Pickup, return, and review stay on the same booking.')),
           const SizedBox(height: 16),
           if (bookings.isEmpty)
-            const Text('你還沒有預約。到探索頁挑一件附近的物品。')
+            Text(tr(context, '你還沒有預約。到探索頁挑一件附近的物品。', 'No bookings yet. Pick an item in Explore.'))
           else
             for (final booking in bookings) ...[
               _BookingCard(bookingId: booking.id),
@@ -142,7 +142,7 @@ class BookingDetailPage extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '物主 ${item.owner}',
+            tr(context, '物主 ${item.owner}', 'Owner ${item.owner}'),
             style: const TextStyle(color: Color(0xFF5E6A64)),
           ),
           const SizedBox(height: 18),
@@ -169,7 +169,10 @@ class BookingDetailPage extends StatelessWidget {
             text: depositLabel(context, booking.deposit),
           ),
           if (booking.issue != null)
-            InfoLine(icon: Icons.report_outlined, text: '問題回報：${booking.issue}'),
+            InfoLine(
+              icon: Icons.report_outlined,
+              text: tr(context, '問題回報：${booking.issue}', 'Issue: ${booking.issue}'),
+            ),
           if (booking.stage == BookingStage.reserved &&
               booking.deposit != DepositStatus.pending) ...[
             const SizedBox(height: 8),
@@ -178,12 +181,16 @@ class BookingDetailPage extends StatelessWidget {
           if (booking.returnCondition != null)
             InfoLine(
               icon: Icons.assignment_turned_in_outlined,
-              text: '歸還狀況：${booking.returnCondition}',
+              text: tr(
+                context,
+                '歸還狀況：${booking.returnCondition}',
+                'Return condition: ${conditionLabel(context, booking.returnCondition ?? '')}',
+              ),
             ),
           if (booking.stage == BookingStage.reviewed) ...[
             const SizedBox(height: 8),
             Text(
-              '你的評價  ${'★' * (booking.stars ?? 0)}',
+              tr(context, '你的評價  ${'★' * (booking.stars ?? 0)}', 'Your review  ${'★' * (booking.stars ?? 0)}'),
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
@@ -192,7 +199,7 @@ class BookingDetailPage extends StatelessWidget {
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: () => _reportIssue(context, booking.id),
-            child: const Text('回報問題'),
+            child: Text(tr(context, '回報問題', 'Report a problem')),
           ),
           if (booking.deposit == DepositStatus.paid &&
               (booking.stage == BookingStage.returned ||
@@ -202,10 +209,10 @@ class BookingDetailPage extends StatelessWidget {
               onPressed: () {
                 store.refundDeposit(booking.id);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('付款服務已確認退款。')),
+                  SnackBar(content: Text(tr(context, '付款服務已確認退款。', 'The refund is marked.'))),
                 );
               },
-              child: const Text('確認退款'),
+              child: Text(tr(context, '確認退款', 'Confirm refund')),
             ),
           ],
         ],
@@ -234,7 +241,7 @@ class _CodeBox extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Text('取件碼', style: TextStyle(color: Color(0xFF5E6A64))),
+          Text(tr(context, '取件碼', 'Pickup code'), style: const TextStyle(color: Color(0xFF5E6A64))),
           const SizedBox(height: 4),
           Text(
             code,
@@ -245,7 +252,10 @@ class _CodeBox extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Text('交給物主核對，然後在下面確認已取件。', textAlign: TextAlign.center),
+          Text(
+            tr(context, '交給物主核對，然後在下面確認已取件。', 'Show this to the owner, then confirm pickup below.'),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -275,29 +285,38 @@ class _ActionBar extends StatelessWidget {
                 ),
               );
             },
-            child: const Text('支付按金'),
+            child: Text(tr(context, '支付按金', 'Pay deposit')),
           ),
         ),
       );
     }
-    final (label, action) = switch (stage) {
-      BookingStage.reserved => ('確認已取件', () => store.markPickedUp(bookingId)),
-      BookingStage.pickedUp => ('確認歸還', () => _returnSheet(context)),
+    final (zh, en, action) = switch (stage) {
+      BookingStage.reserved => (
+        '確認已取件',
+        'Confirm pickup',
+        () => store.markPickedUp(bookingId),
+      ),
+      BookingStage.pickedUp => (
+        '確認歸還',
+        'Confirm return',
+        () => _returnSheet(context),
+      ),
       BookingStage.returned => (
         '撰寫評價',
+        'Write a review',
         () {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => ReviewPage(bookingId: bookingId)),
           );
         },
       ),
-      BookingStage.reviewed => (null, null),
+      BookingStage.reviewed => (null, null, null),
     };
-    if (label == null || action == null) return const SizedBox.shrink();
+    if (zh == null || en == null || action == null) return const SizedBox.shrink();
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-        child: FilledButton(onPressed: action, child: Text(label)),
+        child: FilledButton(onPressed: action, child: Text(tr(context, zh, en))),
       ),
     );
   }
@@ -317,9 +336,9 @@ class _ActionBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '歸還時的狀況',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  Text(
+                    tr(context, '歸還時的狀況', 'Condition on return'),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 12),
                   Wrap(
@@ -328,7 +347,7 @@ class _ActionBar extends StatelessWidget {
                     children: [
                       for (final option in const ['完好', '有輕微使用痕跡', '需要物主再檢查'])
                         ChoiceChip(
-                          label: Text(option),
+                          label: Text(conditionLabel(context, option)),
                           selected: condition == option,
                           onSelected: (_) => setModalState(() => condition = option),
                         ),
@@ -337,7 +356,7 @@ class _ActionBar extends StatelessWidget {
                   const SizedBox(height: 8),
                   FilledButton(
                     onPressed: () => Navigator.pop(context, condition),
-                    child: const Text('完成歸還'),
+                    child: Text(tr(context, '完成歸還', 'Finish return')),
                   ),
                 ],
               ),
@@ -372,9 +391,9 @@ Future<void> _reportIssue(BuildContext context, String bookingId) async {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '回報問題',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                Text(
+                  tr(context, '回報問題', 'Report a problem'),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -382,7 +401,11 @@ Future<void> _reportIssue(BuildContext context, String bookingId) async {
                   children: [
                     for (final option in const ['損壞', '逾期歸還', '其他'])
                       ChoiceChip(
-                        label: Text(option),
+                        label: Text(switch (option) {
+                          '損壞' => tr(context, '損壞', 'Damage'),
+                          '逾期歸還' => tr(context, '逾期歸還', 'Late return'),
+                          _ => tr(context, '其他', 'Other'),
+                        }),
                         selected: kind == option,
                         onSelected: (_) => setModalState(() => kind = option),
                       ),
@@ -392,7 +415,7 @@ Future<void> _reportIssue(BuildContext context, String bookingId) async {
                 TextField(
                   controller: detail,
                   maxLines: 3,
-                  decoration: const InputDecoration(hintText: '發生了什麼事'),
+                  decoration: InputDecoration(hintText: tr(context, '發生了什麼事', 'What happened')),
                 ),
                 const SizedBox(height: 8),
                 FilledButton(
@@ -403,7 +426,7 @@ Future<void> _reportIssue(BuildContext context, String bookingId) async {
                       note.isEmpty ? kind : '$kind：$note',
                     );
                   },
-                  child: const Text('送出回報'),
+                  child: Text(tr(context, '送出回報', 'Send report')),
                 ),
               ],
             ),
@@ -462,7 +485,7 @@ class DepositPage extends StatelessWidget {
               store.payDeposit(bookingId);
               Navigator.of(context).pop();
             },
-            child: const Text('確認付款'),
+            child: Text(tr(context, '確認付款', 'Confirm payment')),
           ),
         ],
       ),
@@ -492,7 +515,7 @@ class _ReviewPageState extends State<ReviewPage> {
   void _submit() {
     if (_comment.text.trim().isEmpty) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('請寫一句使用感受。')));
+          .showSnackBar(SnackBar(content: Text(tr(context, '請寫一句使用感受。', 'Write a short note.'))));
       return;
     }
     ShareKitScope.of(context)
@@ -505,7 +528,7 @@ class _ReviewPageState extends State<ReviewPage> {
     final booking = ShareKitScope.of(context).bookingById(widget.bookingId);
     final item = ShareKitScope.of(context).itemById(booking.itemId);
     return Scaffold(
-      appBar: AppBar(title: const Text('評價')),
+      appBar: AppBar(title: Text(tr(context, '評價', 'Review'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
@@ -514,7 +537,7 @@ class _ReviewPageState extends State<ReviewPage> {
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
-          const Text('交接完成後留低評價，下一個借用的人會看到。'),
+          Text(tr(context, '交接完成後留低評價，下一個借用的人會看到。', 'The next borrower will see this review on the item.')),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -534,10 +557,15 @@ class _ReviewPageState extends State<ReviewPage> {
           TextField(
             controller: _comment,
             maxLines: 4,
-            decoration: const InputDecoration(hintText: '例如：取件準時，電鑽電量充足。'),
+            decoration: InputDecoration(
+              hintText: tr(context, '例如：取件準時，電鑽電量充足。', 'For example: Pickup was on time.'),
+            ),
           ),
           const SizedBox(height: 16),
-          FilledButton(onPressed: _submit, child: const Text('送出評價')),
+          FilledButton(
+            onPressed: _submit,
+            child: Text(tr(context, '送出評價', 'Send review')),
+          ),
         ],
       ),
     );

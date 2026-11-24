@@ -166,7 +166,7 @@ class _ThreadTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${thread.latest.sender}：${thread.latest.body}',
+                      '${thread.latest.sender}：${thread.latest.body.isEmpty ? tr(context, '相片', 'Photo') : thread.latest.body}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Color(0xFF5E6A64)),

@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
+import 'text.dart';
+
 class CameraCapturePage extends StatefulWidget {
   const CameraCapturePage({super.key, required this.title});
 
@@ -28,7 +30,7 @@ class _CameraCapturePageState extends State<CameraCapturePage> {
       final cameras = await availableCameras();
       if (!mounted) return;
       if (cameras.isEmpty) {
-        setState(() => _error = '找不到相機。必須現場拍攝，不能從相簿上載。');
+        setState(() => _error = tr(context, '找不到相機。必須現場拍攝，不能從相簿上載。', 'No camera found. A live photo is required.'));
         return;
       }
       var camera = cameras.first;
@@ -51,7 +53,7 @@ class _CameraCapturePageState extends State<CameraCapturePage> {
       setState(() => _controller = controller);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '無法開啟相機。請允許相機權限。不能改為從裝置上載相片。');
+      setState(() => _error = tr(context, '無法開啟相機。請允許相機權限。不能改為從裝置上載相片。', 'The camera could not open. Allow camera permission.'));
     }
   }
 
@@ -74,7 +76,7 @@ class _CameraCapturePageState extends State<CameraCapturePage> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '拍攝失敗，請再拍一次。';
+        _error = tr(context, '拍攝失敗，請再拍一次。', 'The photo failed. Try again.');
       });
     }
   }
@@ -101,7 +103,7 @@ class _CameraCapturePageState extends State<CameraCapturePage> {
               ),
             )
           : controller == null
-              ? const Center(child: Text('正在開啟相機…', style: TextStyle(color: Colors.white)))
+              ? Center(child: Text(tr(context, '正在開啟相機…', 'Opening the camera…'), style: const TextStyle(color: Colors.white)))
               : Column(
                   children: [
                     Expanded(
@@ -109,12 +111,12 @@ class _CameraCapturePageState extends State<CameraCapturePage> {
                         child: CameraPreview(controller),
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                       child: Text(
-                        '只能用相機拍攝，不能從相簿上載，用來核對物品當時的狀況。',
+                        tr(context, '只能用相機拍攝，不能從相簿上載，用來核對物品當時的狀況。', 'Use the camera so the photo shows the item now.'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white70),
+                        style: const TextStyle(color: Colors.white70),
                       ),
                     ),
                     SafeArea(
@@ -122,7 +124,7 @@ class _CameraCapturePageState extends State<CameraCapturePage> {
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                         child: FilledButton(
                           onPressed: _busy ? null : _shoot,
-                          child: Text(_busy ? '正在拍攝…' : '拍攝'),
+                          child: Text(_busy ? tr(context, '正在拍攝…', 'Taking photo…') : tr(context, '拍攝', 'Take photo')),
                         ),
                       ),
                     ),

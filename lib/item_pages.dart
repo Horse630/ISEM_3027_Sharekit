@@ -9,6 +9,7 @@ import 'chat_center.dart';
 import 'chat_page.dart';
 import 'main.dart';
 import 'models.dart';
+import 'store.dart';
 import 'text.dart';
 import 'widgets.dart';
 
@@ -22,34 +23,39 @@ class ItemDetailPage extends StatelessWidget {
     final store = ShareKitScope.of(context);
     final item = store.itemById(itemId);
     return Scaffold(
-      appBar: AppBar(title: const Text('物品詳情')),
+      appBar: AppBar(title: Text(tr(context, '物品詳情', 'Item'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
-          Hero(
-            tag: item.id,
-            child: item.photoBytes == null
-                ? Container(
-                    height: 180,
-                    decoration: BoxDecoration(
-                      color: item.category.color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Icon(
-                      item.category.icon,
-                      size: 72,
-                      color: item.category.color,
-                    ),
-                  )
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: Image.memory(
-                      item.photoBytes!,
+          GestureDetector(
+            onTap: item.photoBytes == null
+                ? null
+                : () => showFullPhoto(context, item.photoBytes!),
+            child: Hero(
+              tag: item.id,
+              child: item.photoBytes == null
+                  ? Container(
                       height: 180,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
+                      decoration: BoxDecoration(
+                        color: item.category.color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Icon(
+                        item.category.icon,
+                        size: 72,
+                        color: item.category.color,
+                      ),
+                    )
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Image.memory(
+                        item.photoBytes!,
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
                     ),
-                  ),
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -62,10 +68,10 @@ class ItemDetailPage extends StatelessWidget {
             runSpacing: 8,
             children: [
               PriceChip(item: item),
-              _Meta(text: item.category.label),
-              _Meta(text: item.condition),
-              _Meta(text: item.district.label),
-              _Meta(text: item.handover.label),
+              _Meta(text: categoryLabel(context, item.category)),
+              _Meta(text: conditionLabel(context, item.condition)),
+              _Meta(text: districtLabel(context, item.district)),
+              _Meta(text: handoverLabel(context, item.handover)),
             ],
           ),
           const SizedBox(height: 16),
@@ -76,21 +82,34 @@ class ItemDetailPage extends StatelessWidget {
           const SizedBox(height: 16),
           InfoLine(
             icon: Icons.place_outlined,
-            text: '${item.district.label} · ${item.address} · ${formatDistance(item.distanceMeters)}',
+            text:
+                '${districtLabel(context, item.district)} · ${item.address} · ${distanceText(context, item.distanceMeters)}',
           ),
           InfoLine(
             icon: Icons.local_shipping_outlined,
-            text: '交接方式：${item.handover.label}',
+            text: tr(
+              context,
+              '交接方式：${item.handover.label}',
+              'Handover: ${item.handover.en}',
+            ),
           ),
           InfoLine(
             icon: Icons.person_outline,
-            text: '物主 ${item.owner} · 已完成 ${item.handovers} 次交接',
+            text: tr(
+              context,
+              '物主 ${item.owner} · 已完成 ${item.handovers} 次交接',
+              'Owner ${item.owner} · ${item.handovers} handovers',
+            ),
           ),
           InfoLine(
             icon: Icons.star_outline,
             text: item.reviewCount == 0
-                ? '尚未有評價'
-                : '${item.rating} 分 · ${item.reviewCount} 則評價',
+                ? tr(context, '尚未有評價', 'No reviews yet')
+                : tr(
+                    context,
+                    '${item.rating} 分 · ${item.reviewCount} 則評價',
+                    '${item.rating} · ${item.reviewCount} reviews',
+                  ),
           ),
           InfoLine(
             icon: Icons.payments_outlined,
@@ -102,10 +121,26 @@ class ItemDetailPage extends StatelessWidget {
                     'The owner sets the rent. The platform adds no fee.',
                   ),
           ),
+          const SizedBox(height: 16),
+          Text(
+            tr(context, '評價', 'Reviews'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
-          const Text('借用流程', style: TextStyle(fontWeight: FontWeight.w800)),
+          ..._reviewTiles(context, store, item.id),
           const SizedBox(height: 8),
-          const Text('找物品  →  預約  →  取件  →  歸還  →  評價'),
+          Text(
+            tr(context, '借用流程', 'How borrowing works'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            tr(
+              context,
+              '找物品  →  預約  →  取件  →  歸還  →  評價',
+              'Find  →  Book  →  Pick up  →  Return  →  Review',
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -134,22 +169,101 @@ class ItemDetailPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => BookPage(itemId: item.id)),
-                    );
-                  },
-                  child: Text(tr(context, '預約這件物品', 'Book this item')),
-                ),
-              ),
+              Expanded(child: _ownerAction(context, store, item)),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+List<Widget> _reviewTiles(BuildContext context, ShareStore store, String itemId) {
+  final reviews = store.bookings
+      .where(
+        (booking) =>
+            booking.itemId == itemId && (booking.comment ?? '').trim().isNotEmpty,
+      )
+      .toList();
+  if (reviews.isEmpty) {
+    return [
+      Text(
+        tr(context, '還沒有文字評價。', 'No written reviews yet.'),
+        style: const TextStyle(color: Color(0xFF5E6A64)),
+      ),
+    ];
+  }
+  return [
+    for (final review in reviews)
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${'★' * (review.stars ?? 0)}  ${review.borrower.isEmpty ? tr(context, '借用者', 'Borrower') : review.borrower}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(review.comment ?? ''),
+              ],
+            ),
+          ),
+        ),
+      ),
+  ];
+}
+
+Widget _ownerAction(BuildContext context, ShareStore store, ShareItem item) {
+  final user = AccountScope.of(context).user;
+  final mine = item.owner == user.label || item.owner == user.name;
+  if (!mine) {
+    return FilledButton(
+      onPressed: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => BookPage(itemId: item.id)),
+        );
+      },
+      child: Text(tr(context, '預約這件物品', 'Book this item')),
+    );
+  }
+  return FilledButton(
+    style: FilledButton.styleFrom(backgroundColor: const Color(0xFF9A4632)),
+    onPressed: () async {
+      final remove = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(tr(context, '下架這件物品？', 'Remove this item?')),
+          content: Text(
+            tr(
+              context,
+              '下架後，其他人不會再在探索頁看到它。',
+              'Other people will no longer see it in Explore.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(tr(context, '取消', 'Cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(tr(context, '下架', 'Remove')),
+            ),
+          ],
+        ),
+      );
+      if (remove != true || !context.mounted) return;
+      store.removeItem(item.id);
+      Navigator.of(context).pop();
+    },
+    child: Text(tr(context, '下架物品', 'Remove item')),
+  );
 }
 
 class _Meta extends StatelessWidget {
@@ -274,7 +388,7 @@ class _BookPageState extends State<BookPage> {
     final item = ShareKitScope.of(context).itemById(widget.itemId);
     final quote = quoteFor(item, _start, _end);
     return Scaffold(
-      appBar: AppBar(title: const Text('預約')),
+      appBar: AppBar(title: Text(tr(context, '預約', 'Book'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
@@ -288,13 +402,13 @@ class _BookPageState extends State<BookPage> {
             style: const TextStyle(color: Color(0xFF5E6A64)),
           ),
           const SizedBox(height: 18),
-          const Text('借用日期', style: TextStyle(fontWeight: FontWeight.w800)),
+          Text(tr(context, '借用日期', 'Dates'), style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: _DateButton(
-                  label: '開始',
+                  label: tr(context, '開始', 'Start'),
                   value: formatDate(_start),
                   onTap: () => _pick(start: true),
                 ),
@@ -305,7 +419,7 @@ class _BookPageState extends State<BookPage> {
               ),
               Expanded(
                 child: _DateButton(
-                  label: '歸還',
+                  label: tr(context, '歸還', 'Return'),
                   value: formatDate(_end),
                   onTap: () => _pick(start: false),
                 ),
@@ -313,15 +427,17 @@ class _BookPageState extends State<BookPage> {
             ],
           ),
           const SizedBox(height: 18),
-          const Text('交接備註', style: TextStyle(fontWeight: FontWeight.w800)),
+          Text(tr(context, '交接備註', 'Handover note'), style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           TextField(
             controller: _note,
             maxLines: 3,
-            decoration: const InputDecoration(hintText: '例如：星期六下午 3 時，會所大堂'),
+            decoration: InputDecoration(
+              hintText: tr(context, '例如：星期六下午 3 時，會所大堂', 'For example: Saturday 3pm, clubhouse lobby'),
+            ),
           ),
           const SizedBox(height: 18),
-          const Text('費用', style: TextStyle(fontWeight: FontWeight.w800)),
+          Text(tr(context, '費用', 'Cost'), style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           _FeeRow(label: tr(context, '日數', 'Days'), value: '${quote.days}'),
           _FeeRow(
@@ -334,7 +450,7 @@ class _BookPageState extends State<BookPage> {
           ),
           const Divider(),
           _FeeRow(
-            label: '合計',
+            label: tr(context, '合計', 'Total'),
             value: quote.free ? 'HK\$0' : money(quote.total),
             strong: true,
           ),
@@ -347,7 +463,7 @@ class _BookPageState extends State<BookPage> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: FilledButton(onPressed: _confirm, child: const Text('確認預約')),
+          child: FilledButton(onPressed: _confirm, child: Text(tr(context, '確認預約', 'Confirm booking'))),
         ),
       ),
     );
@@ -468,19 +584,19 @@ class _ListItemPageState extends State<ListItemPage> {
     final summary = _summary.text.trim();
     final address = _address.text.trim();
     if (name.isEmpty || summary.isEmpty || address.isEmpty) {
-      setState(() => _error = '請填寫名稱、地址和簡介。');
+      setState(() => _error = tr(context, '請填寫名稱、地址和簡介。', 'Enter a name, address, and description.'));
       return;
     }
     final photo = _photo;
     if (photo == null) {
-      setState(() => _error = '請用相機拍攝物品現況。不能從相簿上載。');
+      setState(() => _error = tr(context, '請用相機拍攝物品現況。不能從相簿上載。', 'Take a photo of the item with the camera.'));
       return;
     }
     double? dailyPrice;
     if (_price.text.trim().isNotEmpty) {
       final parsed = double.tryParse(_price.text.trim());
       if (parsed == null || parsed < 0) {
-        setState(() => _error = '租金請填數字，或留空代表免費。');
+        setState(() => _error = tr(context, '租金請填數字，或留空代表免費。', 'Enter a number for the rent, or leave it blank for free.'));
         return;
       }
       dailyPrice = parsed == 0 ? null : parsed;
@@ -499,17 +615,21 @@ class _ListItemPageState extends State<ListItemPage> {
     );
     ShareKitScope.of(context).openTab(0);
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('已上架到本社區，附近的人可以搜尋到。')));
+        .showSnackBar(SnackBar(content: Text(tr(context, '已上架到本社區，附近的人可以搜尋到。', 'Listed. People nearby can search for it.'))));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('上架物品')),
+      appBar: AppBar(title: Text(tr(context, '上架物品', 'List an item'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
-          const Text('把家裡不常用的東西借給同一個社區。留空租金即為免費借用。上架必須用相機拍攝當時的物品狀況，不能從相簿上載。'),
+          Text(tr(
+            context,
+            '把家裡不常用的東西借給同一個社區。留空租金即為免費借用。上架必須用相機拍攝當時的物品狀況，不能從相簿上載。',
+            'Lend something you rarely use. Leave the price blank to lend it for free. Take a photo with the camera.',
+          )),
           const SizedBox(height: 16),
           if (_photo != null)
             ClipRRect(
@@ -526,7 +646,7 @@ class _ListItemPageState extends State<ListItemPage> {
             onPressed: () async {
               final bytes = await Navigator.of(context).push<Uint8List>(
                 MaterialPageRoute(
-                  builder: (_) => const CameraCapturePage(title: '拍攝物品現況'),
+                  builder: (_) => CameraCapturePage(title: tr(context, '拍攝物品現況', 'Photograph the item')),
                 ),
               );
               if (!mounted || bytes == null) return;
@@ -535,36 +655,36 @@ class _ListItemPageState extends State<ListItemPage> {
                 _error = null;
               });
             },
-            child: Text(_photo == null ? '用相機拍攝' : '重新拍攝'),
+            child: Text(_photo == null ? tr(context, '用相機拍攝', 'Take a photo') : tr(context, '重新拍攝', 'Retake')),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _name,
-            decoration: const InputDecoration(labelText: '物品名稱'),
+            decoration: InputDecoration(labelText: tr(context, '物品名稱', 'Item name')),
           ),
           const SizedBox(height: 12),
-          const Text('分類', style: TextStyle(fontWeight: FontWeight.w700)),
+          Text(tr(context, '分類', 'Category'), style: const TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: [
               for (final category in ItemCategory.values)
                 ChoiceChip(
-                  label: Text(category.label),
+                  label: Text(categoryLabel(context, category)),
                   selected: _category == category,
                   onSelected: (_) => setState(() => _category = category),
                 ),
             ],
           ),
           const SizedBox(height: 12),
-          const Text('狀況', style: TextStyle(fontWeight: FontWeight.w700)),
+          Text(tr(context, '狀況', 'Condition'), style: const TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: [
               for (final condition in const ['全新', '良好', '有使用痕跡'])
                 ChoiceChip(
-                  label: Text(condition),
+                  label: Text(conditionLabel(context, condition)),
                   selected: _condition == condition,
                   onSelected: (_) => setState(() => _condition = condition),
                 ),
@@ -577,7 +697,7 @@ class _ListItemPageState extends State<ListItemPage> {
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
-            decoration: const InputDecoration(labelText: '每日租金（港元，可留空）'),
+            decoration: InputDecoration(labelText: tr(context, '每日租金（港元，可留空）', 'Daily rent in HKD, optional')),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -591,25 +711,25 @@ class _ListItemPageState extends State<ListItemPage> {
               setState(() => _district = picked!.district!);
             },
             icon: const Icon(Icons.map_outlined),
-            label: Text('地區 · ${_district.label}'),
+            label: Text(tr(context, '地區 · ${_district.label}', 'District · ${_district.en}')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _address,
-            decoration: const InputDecoration(
-              labelText: '你的地址',
-              hintText: '例如：九龍塘XX座X樓',
+            decoration: InputDecoration(
+              labelText: tr(context, '你的地址', 'Your address'),
+              hintText: tr(context, '例如：九龍塘XX座X樓', 'For example: Tower 1, Kowloon Tong'),
             ),
           ),
           const SizedBox(height: 12),
-          const Text('交接方式', style: TextStyle(fontWeight: FontWeight.w700)),
+          Text(tr(context, '交接方式', 'Handover'), style: const TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: [
               for (final method in HandoverMethod.values)
                 ChoiceChip(
-                  label: Text(method.label),
+                  label: Text(handoverLabel(context, method)),
                   selected: _handover == method,
                   onSelected: (_) => setState(() => _handover = method),
                 ),
@@ -619,9 +739,9 @@ class _ListItemPageState extends State<ListItemPage> {
           TextField(
             controller: _summary,
             maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: '簡介',
-              hintText: '相片位置、配件、使用限制',
+            decoration: InputDecoration(
+              labelText: tr(context, '簡介', 'Description'),
+              hintText: tr(context, '相片位置、配件、使用限制', 'Accessories and limits'),
             ),
           ),
           if (_error != null) ...[
@@ -629,7 +749,7 @@ class _ListItemPageState extends State<ListItemPage> {
             Text(_error!, style: const TextStyle(color: Color(0xFF9A4632))),
           ],
           const SizedBox(height: 16),
-          FilledButton(onPressed: _publish, child: const Text('發佈到本社區')),
+          FilledButton(onPressed: _publish, child: Text(tr(context, '發佈到本社區', 'Publish'))),
         ],
       ),
     );

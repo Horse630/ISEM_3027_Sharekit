@@ -54,6 +54,7 @@ class ChatMessage {
     required this.sender,
     required this.body,
     required this.createdAt,
+    this.photo,
   });
 
   final int id;
@@ -61,6 +62,7 @@ class ChatMessage {
   final String sender;
   final String body;
   final DateTime createdAt;
+  final Uint8List? photo;
 }
 
 class VerificationChallenge {
@@ -103,7 +105,7 @@ class AuthRepository {
         p.join(await getDatabasesPath(), 'sharekit.db');
     _db = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -176,6 +178,13 @@ class AuthRepository {
             await db.execute(
               "ALTER TABLE bookings ADD COLUMN borrower TEXT NOT NULL DEFAULT ''",
             );
+          }
+        }
+        if (oldVersion < 7) {
+          final columns = await db.rawQuery('PRAGMA table_info(messages)');
+          final hasPhoto = columns.any((row) => row['name'] == 'photo');
+          if (!hasPhoto) {
+            await db.execute('ALTER TABLE messages ADD COLUMN photo BLOB');
           }
         }
       },
@@ -446,7 +455,8 @@ class AuthRepository {
         item_id TEXT NOT NULL,
         sender TEXT NOT NULL,
         body TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        photo BLOB
       )
     ''');
   }
@@ -477,6 +487,7 @@ class AuthRepository {
           sender: row['sender'] as String,
           body: row['body'] as String,
           createdAt: DateTime.parse(row['created_at'] as String),
+          photo: _photoOf(row['photo']),
         ),
     ];
   }
@@ -485,17 +496,25 @@ class AuthRepository {
     required String itemId,
     required String sender,
     required String body,
+    Uint8List? photo,
   }) async {
     if (_useRemote) {
-      return _remoteSendMessage(itemId: itemId, sender: sender, body: body);
+      return _remoteSendMessage(
+        itemId: itemId,
+        sender: sender,
+        body: body,
+        photo: photo,
+      );
     }
     final text = body.trim();
-    if (text.isEmpty) return;
+    final shrunk = shrinkPhotoBytes(photo);
+    if (text.isEmpty && shrunk == null) return;
     await _database.insert('messages', {
       'item_id': itemId,
       'sender': sender,
       'body': text,
       'created_at': DateTime.now().toIso8601String(),
+      'photo': shrunk,
     });
   }
 
@@ -660,6 +679,7 @@ class AuthRepository {
             body: (row['body'] as String?) ?? '',
             createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ??
                 DateTime.now(),
+            photo: _photoOf(row['photo']),
           ),
     ]..sort((a, b) => a.id.compareTo(b.id));
     return messages;
@@ -669,14 +689,17 @@ class AuthRepository {
     required String itemId,
     required String sender,
     required String body,
+    Uint8List? photo,
   }) async {
     final text = body.trim();
-    if (text.isEmpty) return;
+    final shrunk = shrinkPhotoBytes(photo);
+    if (text.isEmpty && shrunk == null) return;
     await _api.create('messages', {
       'message_id': DateTime.now().millisecondsSinceEpoch,
       'item_id': itemId,
       'sender': sender,
       'body': text,
+      'photo': shrunk == null ? '' : base64Encode(shrunk),
       'created_at': DateTime.now().toIso8601String(),
     });
   }

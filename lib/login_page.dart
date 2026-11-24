@@ -44,11 +44,11 @@ class _LoginPageState extends State<LoginPage> {
     final name = _name.text.trim();
     final password = _password.text;
     if (name.isEmpty || password.isEmpty) {
-      setState(() => _error = '請填名稱和密碼。');
+      setState(() => _error = tr(context, '請填名稱和密碼。', 'Enter a name and password.'));
       return;
     }
     if (_registering && _contact.text.trim().isEmpty) {
-      setState(() => _error = '請填電郵或電話。');
+      setState(() => _error = tr(context, '請填電郵或電話。', 'Enter an email or phone number.'));
       return;
     }
     setState(() {
@@ -75,7 +75,7 @@ class _LoginPageState extends State<LoginPage> {
       if (user == null) {
         setState(() {
           _busy = false;
-          _error = '名稱或密碼不對。';
+          _error = tr(context, '名稱或密碼不對。', 'That name or password is wrong.');
         });
         return;
       }
@@ -90,7 +90,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '登入失敗：$error';
+        _error = tr(context, '登入失敗：$error', 'Could not sign in: $error');
       });
     }
   }
@@ -119,7 +119,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '驗證失敗：$error';
+        _error = tr(context, '驗證失敗：$error', 'Could not verify: $error');
       });
     }
   }
@@ -155,10 +155,10 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   Text(
                     _challenge != null
-                        ? '確認電郵或電話後就可以使用。'
+                        ? tr(context, '確認電郵或電話後就可以使用。', 'Confirm your email or phone to continue.')
                         : _registering
-                            ? '建立帳號後就可以預約附近的物品。'
-                            : '登入後就可以預約附近的物品。',
+                            ? tr(context, '建立帳號後就可以預約附近的物品。', 'Create an account to borrow nearby items.')
+                            : tr(context, '登入後就可以預約附近的物品。', 'Sign in to borrow nearby items.'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 16,
@@ -190,9 +190,9 @@ class _LoginPageState extends State<LoginPage> {
         TextField(
           controller: _name,
           textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(
-            labelText: '名稱',
-            fillColor: Color(0xFFF4F1EB),
+          decoration: InputDecoration(
+            labelText: tr(context, '名稱', 'Name'),
+            fillColor: const Color(0xFFF4F1EB),
           ),
         ),
         if (_registering) ...[
@@ -200,9 +200,9 @@ class _LoginPageState extends State<LoginPage> {
           TextField(
             controller: _contact,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: '電郵或電話',
-              fillColor: Color(0xFFF4F1EB),
+            decoration: InputDecoration(
+              labelText: tr(context, '電郵或電話', 'Email or phone'),
+              fillColor: const Color(0xFFF4F1EB),
             ),
           ),
         ],
@@ -211,9 +211,9 @@ class _LoginPageState extends State<LoginPage> {
           controller: _password,
           obscureText: true,
           onSubmitted: (_) => _submit(),
-          decoration: const InputDecoration(
-            labelText: '密碼',
-            fillColor: Color(0xFFF4F1EB),
+          decoration: InputDecoration(
+            labelText: tr(context, '密碼', 'Password'),
+            fillColor: const Color(0xFFF4F1EB),
           ),
         ),
         const SizedBox(height: 18),
@@ -229,7 +229,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         if (_error != null) ...[
           const SizedBox(height: 12),
-          Text(_error!, style: TextStyle(color: Colors.red.shade800)),
+          Text(shown(context, _error!), style: TextStyle(color: Colors.red.shade800)),
         ],
         const SizedBox(height: 4),
         TextButton(
@@ -239,7 +239,11 @@ class _LoginPageState extends State<LoginPage> {
                   _registering = !_registering;
                   _error = null;
                 }),
-          child: Text(_registering ? '已有帳號？登入' : '還沒有帳號？註冊'),
+          child: Text(
+            _registering
+                ? tr(context, '已有帳號？登入', 'Already have an account? Log in')
+                : tr(context, '還沒有帳號？註冊', 'No account yet? Register'),
+          ),
         ),
       ],
     );
@@ -250,29 +254,33 @@ class _LoginPageState extends State<LoginPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('驗證碼已準備好，請向 ${challenge.contact} 核對。'),
+        Text(tr(context, '驗證碼已準備好，請向 ${challenge.contact} 核對。', 'Check the code against ${challenge.contact}.')),
         const SizedBox(height: 8),
         Text(
-          '這台裝置沒有接駁真實短訊，驗證碼是 ${challenge.code}。',
+          tr(
+            context,
+            '這台裝置沒有接駁真實短訊，驗證碼是 ${challenge.code}。',
+            'This device does not send a real text. The code is ${challenge.code}.',
+          ),
           style: const TextStyle(color: Color(0xFF5E6A64), height: 1.4),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _code,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: '驗證碼',
-            fillColor: Color(0xFFF4F1EB),
+          decoration: InputDecoration(
+            labelText: tr(context, '驗證碼', 'Code'),
+            fillColor: const Color(0xFFF4F1EB),
           ),
         ),
         const SizedBox(height: 18),
         FilledButton(
           onPressed: _busy ? null : _verify,
-          child: Text(_busy ? '請稍候…' : '確認驗證碼'),
+          child: Text(_busy ? tr(context, '請稍候…', 'Please wait…') : tr(context, '確認驗證碼', 'Confirm code')),
         ),
         if (_error != null) ...[
           const SizedBox(height: 12),
-          Text(_error!, style: TextStyle(color: Colors.red.shade800)),
+          Text(shown(context, _error!), style: TextStyle(color: Colors.red.shade800)),
         ],
       ],
     );

@@ -109,7 +109,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _takePhoto() async {
     final bytes = await Navigator.of(context).push<Uint8List>(
       MaterialPageRoute(
-        builder: (_) => const CameraCapturePage(title: '拍攝個人相片'),
+        builder: (_) => CameraCapturePage(
+          title: tr(context, '拍攝個人相片', 'Take a profile photo'),
+        ),
       ),
     );
     if (!mounted || bytes == null) return;
@@ -145,7 +147,15 @@ class _SettingsPageState extends State<SettingsPage> {
       widget.onChanged(user);
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已儲存。新上架的物品會用這個地址和地區。')),
+        SnackBar(
+          content: Text(
+            tr(
+              context,
+              '已儲存。新上架的物品會用這個地址和地區。',
+              'Saved. New listings use this address and district.',
+            ),
+          ),
+        ),
       );
     } on AuthFailure catch (error) {
       if (!mounted) return;
@@ -183,13 +193,17 @@ class _SettingsPageState extends State<SettingsPage> {
           return ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
-          const Text(
-            '設定',
-            style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
+          Text(
+            tr(context, '設定', 'Settings'),
+            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
           Text(
-            '登入名稱 ${widget.user.name} · ${widget.user.verified ? '已驗證' : '尚未驗證'}',
+            tr(
+              context,
+              '登入名稱 ${widget.user.name} · ${widget.user.verified ? '已驗證' : '尚未驗證'}',
+              'Login ${widget.user.name} · ${widget.user.verified ? 'Verified' : 'Not verified'}',
+            ),
             style: const TextStyle(color: Color(0xFF5E6A64)),
           ),
           const SizedBox(height: 16),
@@ -209,13 +223,13 @@ class _SettingsPageState extends State<SettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '你上架了 $mine 件物品',
+                      tr(context, '你上架了 $mine 件物品', 'You listed $mine items'),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton(
                       onPressed: _busy ? null : _takePhoto,
-                      child: const Text('拍攝個人相片'),
+                      child: Text(tr(context, '拍攝個人相片', 'Take a profile photo')),
                     ),
                   ],
                 ),
@@ -223,28 +237,40 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
-            '個人相片只能用相機拍攝，不能從相簿上載。',
-            style: TextStyle(color: Color(0xFF5E6A64), height: 1.4),
+          Text(
+            tr(
+              context,
+              '個人相片只能用相機拍攝，不能從相簿上載。',
+              'Profile photos must be taken with the camera.',
+            ),
+            style: const TextStyle(color: Color(0xFF5E6A64), height: 1.4),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _name,
-            decoration: const InputDecoration(labelText: '顯示名稱'),
+            decoration: InputDecoration(
+              labelText: tr(context, '顯示名稱', 'Display name'),
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _address,
-            decoration: const InputDecoration(
-              labelText: '聯絡地址',
-              hintText: '例如：九龍塘XX座X樓',
+            decoration: InputDecoration(
+              labelText: tr(context, '聯絡地址', 'Address'),
+              hintText: tr(context, '例如：九龍塘XX座X樓', 'For example: Tower 1, Kowloon Tong'),
             ),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _busy ? null : _pickDistrict,
             icon: const Icon(Icons.map_outlined),
-            label: Text('居住地區 · ${_district.label}'),
+            label: Text(
+              tr(
+                context,
+                '居住地區 · ${_district.label}',
+                'Home district · ${_district.en}',
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -285,12 +311,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 spacing: 8,
                 children: [
                   ChoiceChip(
-                    label: const Text('標準'),
+                    label: Text(tr(context, '標準', 'Standard')),
                     selected: widget.ui.textScale < 1.1,
                     onSelected: (_) => widget.ui.setTextScale(1),
                   ),
                   ChoiceChip(
-                    label: const Text('較大'),
+                    label: Text(tr(context, '較大', 'Larger')),
                     selected: widget.ui.textScale >= 1.1,
                     onSelected: (_) => widget.ui.setTextScale(1.2),
                   ),
@@ -301,29 +327,37 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _busy ? null : _save,
-            child: Text(_busy ? '請稍候…' : '儲存資料'),
+            child: Text(
+              _busy
+                  ? tr(context, '請稍候…', 'Please wait…')
+                  : tr(context, '儲存資料', 'Save'),
+            ),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!, style: const TextStyle(color: Color(0xFF9A4632))),
+            Text(shown(context, _error!), style: const TextStyle(color: Color(0xFF9A4632))),
           ],
           const SizedBox(height: 20),
           Text(
             _joined
-                ? '已加入${ShareStore.community}'
-                : '加入社區後，附近的人可以看到你上架的物品。',
+                ? tr(context, '已加入${ShareStore.community}', 'Joined ${ShareStore.community}')
+                : tr(
+                    context,
+                    '加入社區後，附近的人可以看到你上架的物品。',
+                    'Join the community so neighbours can see your listings.',
+                  ),
             style: const TextStyle(height: 1.4),
           ),
           const SizedBox(height: 8),
           if (!_joined)
             FilledButton(
               onPressed: _busy ? null : _join,
-              child: Text('加入${ShareStore.community}'),
+              child: Text(tr(context, '加入${ShareStore.community}', 'Join ${ShareStore.community}')),
             ),
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: _busy ? null : widget.onLogout,
-            child: const Text('登出'),
+            child: Text(tr(context, '登出', 'Log out')),
           ),
         ],
       );

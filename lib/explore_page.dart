@@ -39,7 +39,9 @@ class _ExplorePageState extends State<ExplorePage> {
       owner: _mineOnly ? user.label : null,
       sort: _sort,
     );
-    final place = _district?.label ?? '全港';
+    final place = _district == null
+        ? tr(context, '全港', 'All Hong Kong')
+        : districtLabel(context, _district!);
 
     return SafeArea(
       child: ListView(
@@ -54,9 +56,13 @@ class _ExplorePageState extends State<ExplorePage> {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            '先選地區，再借附近的人已經有的東西。',
-            style: TextStyle(fontSize: 16, color: Color(0xFF3E4A44)),
+          Text(
+            tr(
+              context,
+              '先選地區，再借附近的人已經有的東西。',
+              'Pick a district, then borrow what people nearby already have.',
+            ),
+            style: const TextStyle(fontSize: 16, color: Color(0xFF3E4A44)),
           ),
           const SizedBox(height: 14),
           const _PilotCard(),
@@ -64,9 +70,9 @@ class _ExplorePageState extends State<ExplorePage> {
           TextField(
             controller: _query,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              hintText: '搜尋電鑽、露營、摺枱…',
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              hintText: tr(context, '搜尋電鑽、露營、摺枱…', 'Search drills, camping, tables…'),
+              prefixIcon: const Icon(Icons.search),
             ),
           ),
           const SizedBox(height: 12),
@@ -75,7 +81,7 @@ class _ExplorePageState extends State<ExplorePage> {
             child: Row(
               children: [
                 _FilterChip(
-                  label: '全部',
+                  label: tr(context, '全部', 'All'),
                   selected: _category == null && !_freeOnly,
                   onTap: () => setState(() {
                     _category = null;
@@ -89,17 +95,21 @@ class _ExplorePageState extends State<ExplorePage> {
                     onTap: () => setState(() => _category = category),
                   ),
                 _FilterChip(
-                  label: '只看免費',
+                  label: tr(context, '只看免費', 'Free only'),
                   selected: _freeOnly,
                   onTap: () => setState(() => _freeOnly = !_freeOnly),
                 ),
                 _FilterChip(
-                  label: '我的區 · ${user.district.label}',
+                  label: tr(
+                    context,
+                    '我的區 · ${user.district.label}',
+                    'My district · ${user.district.en}',
+                  ),
                   selected: _district == user.district,
                   onTap: () => setState(() => _district = user.district),
                 ),
                 _FilterChip(
-                  label: '我的物品',
+                  label: tr(context, '我的物品', 'My items'),
                   selected: _mineOnly,
                   onTap: () => setState(() => _mineOnly = !_mineOnly),
                 ),
@@ -148,8 +158,12 @@ class _ExplorePageState extends State<ExplorePage> {
               padding: const EdgeInsets.only(top: 28),
               child: Text(
                 _mineOnly
-                    ? '你還沒有上架物品。'
-                    : '這個地區暫時沒有符合的物品。可以改選其他區，或自己上架。',
+                    ? tr(context, '你還沒有上架物品。', 'You have not listed anything yet.')
+                    : tr(
+                        context,
+                        '這個地區暫時沒有符合的物品。可以改選其他區，或自己上架。',
+                        'Nothing in this district matches. Try another district, or list an item.',
+                      ),
               ),
             )
           else if (MediaQuery.sizeOf(context).width >= 900)
@@ -187,20 +201,24 @@ class _PilotCard extends StatelessWidget {
         color: const Color(0xFF14352C),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '香港十八區 · 社區借用',
-            style: TextStyle(
+            tr(context, '香港十八區 · 社區借用', 'Hong Kong’s 18 districts'),
+            style: const TextStyle(
               color: Color(0xFFE7F3EE),
               fontWeight: FontWeight.w700,
             ),
           ),
-          SizedBox(height: 6),
+          const SizedBox(height: 6),
           Text(
-            '先揀你所在的區。電鑽、清潔機、露營裝備很多時一年只用幾次，附近已經有人擁有。',
-            style: TextStyle(color: Color(0xFFD5E4DC), height: 1.4),
+            tr(
+              context,
+              '先揀你所在的區。電鑽、清潔機、露營裝備很多時一年只用幾次，附近已經有人擁有。',
+              'Start with your district. Drills, cleaners, and camping gear are often used only a few times a year.',
+            ),
+            style: const TextStyle(color: Color(0xFFD5E4DC), height: 1.4),
           ),
         ],
       ),
@@ -271,7 +289,7 @@ class _ItemCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${item.district.label} · ${formatDistance(item.distanceMeters)} · ${item.condition}',
+                      '${districtLabel(context, item.district)} · ${distanceText(context, item.distanceMeters)} · ${conditionLabel(context, item.condition)}',
                       style: const TextStyle(
                         color: Color(0xFF5E6A64),
                         fontSize: 13,
@@ -289,7 +307,7 @@ class _ItemCard extends StatelessWidget {
                         ),
                         Text(
                           item.reviewCount == 0
-                              ? ' 新上架'
+                              ? tr(context, ' 新上架', ' New')
                               : ' ${item.rating}（${item.reviewCount}）',
                           style: const TextStyle(fontSize: 12),
                         ),

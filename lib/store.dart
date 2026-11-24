@@ -96,6 +96,14 @@ class ShareStore extends ChangeNotifier {
 
   ShareItem itemById(String id) => _items.firstWhere((item) => item.id == id);
 
+  void removeItem(String id) {
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index == -1) return;
+    _items.removeAt(index);
+    notifyListeners();
+    _persist();
+  }
+
   ShareItem? findItem(String id) {
     for (final item in _items) {
       if (item.id == id) return item;
