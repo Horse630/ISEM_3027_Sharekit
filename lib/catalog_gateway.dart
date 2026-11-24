@@ -119,8 +119,7 @@ class RemoteCatalog implements CatalogGateway {
 }
 
 class PublicCatalog implements CatalogGateway {
-  static const documentUrl =
-      'https://crudcrud.com/api/ca79774c90ee43e8bd32fdd71190db70/catalog/6afdf9211dded903e8a5c46f';
+  static const documentUrl = 'http://127.0.0.1:8780/api/catalog';
 
   static Future<PublicCatalog?> connect() async {
     try {

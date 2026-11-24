@@ -33,10 +33,11 @@
    - 名稱、物主、分類、狀況、地址、交接方式、租金、評價、相片和預約都寫進 `items`、`bookings`。同一個瀏覽器重新開啟仍然在。
    - 每個瀏覽器的 SQLite 存在自己的 IndexedDB，Firefox 讀不到 Edge 的檔案。GitHub Pages 也連不到 `127.0.0.1`。
    - 網站改為讀寫公開的 HTTPS 物品庫。不同瀏覽器、不同帳號看到同一份物品。本機 `python tool/catalog_server.py` 只給本機測試用。
-9. 2026-11-24 網站和手機改為只用同一份線上資料庫：
-   - 帳號、物品、預約、聊天都放在同一個 crudcrud 資料庫。不再用每個瀏覽器自己的 SQLite 當正式資料。
-   - 這台裝置只記住目前登入的名稱，用來在重新整理後保持登入。
-   - 測試仍可用本機 SQLite，避免測試去改線上資料。
+9. 2026-11-24 改為使用 MongoDB Atlas：
+   - 帳號、物品、預約、聊天都放在 Atlas 的 `sharekit` 資料庫。
+   - 連線密碼只放在本機 `atlas-credentials.env`。這個檔案已列入 `.gitignore`，不會推上 GitHub。
+   - 網站不能直接連 MongoDB。先在這台電腦執行 `python tool/mongo_server.py`，瀏覽器再連 `http://127.0.0.1:8780`。
+   - 已移除 crudcrud 連線。測試仍可用本機 SQLite，避免測試改到 Atlas。
 
 ## 網址
 

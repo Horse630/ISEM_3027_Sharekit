@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class RemoteApi {
-  static const root =
-      'https://crudcrud.com/api/ca79774c90ee43e8bd32fdd71190db70';
+  static const root = 'http://127.0.0.1:8780/api';
 
   Future<List<Map<String, dynamic>>> list(String collection) async {
     final response = await http
