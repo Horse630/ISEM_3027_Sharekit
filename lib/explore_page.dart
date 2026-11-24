@@ -100,15 +100,6 @@ class _ExplorePageState extends State<ExplorePage> {
                   onTap: () => setState(() => _freeOnly = !_freeOnly),
                 ),
                 _FilterChip(
-                  label: tr(
-                    context,
-                    '我的區 · ${user.district.label}',
-                    'My district · ${user.district.en}',
-                  ),
-                  selected: _district == user.district,
-                  onTap: () => setState(() => _district = user.district),
-                ),
-                _FilterChip(
                   label: tr(context, '我的物品', 'My items'),
                   selected: _mineOnly,
                   onTap: () => setState(() => _mineOnly = !_mineOnly),

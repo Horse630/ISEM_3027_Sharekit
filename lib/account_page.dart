@@ -72,7 +72,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _address;
   late HkDistrict _district;
   Uint8List? _photo;
-  late bool _joined;
   var _busy = false;
   String? _error;
 
@@ -83,7 +82,6 @@ class _SettingsPageState extends State<SettingsPage> {
     _address = TextEditingController(text: widget.user.address);
     _district = widget.user.district;
     _photo = widget.user.photo;
-    _joined = widget.user.communityJoined;
     widget.ui.load();
   }
 
@@ -95,7 +93,6 @@ class _SettingsPageState extends State<SettingsPage> {
       _address.text = widget.user.address;
       _district = widget.user.district;
       _photo = widget.user.photo;
-      _joined = widget.user.communityJoined;
     }
   }
 
@@ -163,21 +160,6 @@ class _SettingsPageState extends State<SettingsPage> {
         _busy = false;
         _error = error.message;
       });
-    }
-  }
-
-  Future<void> _join() async {
-    setState(() => _busy = true);
-    try {
-      final user = await widget.auth.joinCommunity(widget.user.id);
-      if (!mounted) return;
-      widget.onChanged(user);
-      setState(() {
-        _joined = true;
-        _busy = false;
-      });
-    } finally {
-      if (mounted && _busy) setState(() => _busy = false);
     }
   }
 
@@ -337,23 +319,6 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 12),
             Text(shown(context, _error!), style: const TextStyle(color: Color(0xFF9A4632))),
           ],
-          const SizedBox(height: 20),
-          Text(
-            _joined
-                ? tr(context, '已加入${ShareStore.community}', 'Joined ${ShareStore.community}')
-                : tr(
-                    context,
-                    '加入社區後，附近的人可以看到你上架的物品。',
-                    'Join the community so neighbours can see your listings.',
-                  ),
-            style: const TextStyle(height: 1.4),
-          ),
-          const SizedBox(height: 8),
-          if (!_joined)
-            FilledButton(
-              onPressed: _busy ? null : _join,
-              child: Text(tr(context, '加入${ShareStore.community}', 'Join ${ShareStore.community}')),
-            ),
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: _busy ? null : widget.onLogout,
