@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'auth_repository.dart';
+import 'booking_pages.dart';
 import 'catalog_gateway.dart';
 import 'chat_center.dart';
 import 'models.dart';
@@ -195,6 +196,30 @@ class _ChatPageState extends State<ChatPage> {
   }
 }
 
+ButtonStyle _chatButton({required bool filled}) {
+  const size = Size(156, 52);
+  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(14));
+  final text = const TextStyle(fontSize: 14, fontWeight: FontWeight.w700);
+  if (filled) {
+    return FilledButton.styleFrom(
+      minimumSize: size,
+      maximumSize: size,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      textStyle: text,
+      shape: shape,
+    );
+  }
+  return OutlinedButton.styleFrom(
+    minimumSize: size,
+    maximumSize: size,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    textStyle: text,
+    shape: shape,
+  );
+}
+
 class _Bubble extends StatelessWidget {
   const _Bubble({
     required this.message,
@@ -272,12 +297,15 @@ class _Bubble extends StatelessWidget {
     if (message.kind == 'request' && isOwner && booking.stage == BookingStage.requested) {
       return Wrap(
         spacing: 8,
+        runSpacing: 8,
         children: [
           FilledButton(
+            style: _chatButton(filled: true),
             onPressed: () => _accept(context, catalog, booking!),
             child: Text(tr(context, '同意', 'Accept')),
           ),
           OutlinedButton(
+            style: _chatButton(filled: false),
             onPressed: () => _reject(context, catalog, booking!),
             child: Text(tr(context, '拒絕', 'Reject')),
           ),
@@ -286,8 +314,9 @@ class _Bubble extends StatelessWidget {
     }
     if (message.kind == 'pay' && !isOwner && catalog.needsOnlinePayment(booking)) {
       return FilledButton(
-        onPressed: () => _pay(context, catalog, booking!),
-        child: Text(tr(context, '完成付款', 'Pay now')),
+        style: _chatButton(filled: true),
+        onPressed: () => _openBooking(context, booking!.id),
+        child: Text(tr(context, '前往付款', 'Open payment')),
       );
     }
     if (message.kind == 'code' &&
@@ -295,25 +324,34 @@ class _Bubble extends StatelessWidget {
         booking.stage == BookingStage.reserved &&
         catalog.codeReady(booking)) {
       return FilledButton(
-        onPressed: () => _handedOver(context, catalog, booking!),
-        child: Text(tr(context, '確認已借出', 'Confirm handed over')),
+        style: _chatButton(filled: true),
+        onPressed: () => _openBooking(context, booking!.id),
+        child: Text(tr(context, '前往確認借出', 'Open handover')),
       );
     }
     if (message.kind == 'rented' && isOwner && booking.stage == BookingStage.pickedUp) {
       return FilledButton(
-        onPressed: () => _returned(context, catalog, booking!),
-        child: Text(tr(context, '確認歸還', 'Confirm return')),
+        style: _chatButton(filled: true),
+        onPressed: () => _openBooking(context, booking!.id),
+        child: Text(tr(context, '前往確認歸還', 'Open return')),
       );
     }
     if (message.kind == 'returned' &&
         booking.stage == BookingStage.returned &&
         (booking.comment ?? '').isEmpty) {
-      return OutlinedButton(
-        onPressed: () => _comment(context, catalog, booking!),
-        child: Text(tr(context, '寫評價（可留空）', 'Add a review (optional)')),
+      return FilledButton(
+        style: _chatButton(filled: true),
+        onPressed: () => _openBooking(context, booking!.id),
+        child: Text(tr(context, '前往評價', 'Open review')),
       );
     }
     return null;
+  }
+
+  void _openBooking(BuildContext context, String bookingId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => BookingDetailPage(bookingId: bookingId)),
+    );
   }
 
   String _owner(ShareStore catalog, Booking booking) {
@@ -328,11 +366,11 @@ class _Bubble extends StatelessWidget {
       itemId: booking.itemId,
       sender: _owner(catalog, booking),
       body: [
-        tr(context, '物主已同意這次租借。', 'The owner accepted this rental.'),
+        both('物主已同意這次租借。', 'The owner accepted this rental.'),
         if (needsPay)
-          tr(context, '請按下面按鈕完成付款。', 'Tap below to pay.')
+          both('請到預約頁完成付款。', 'Open the booking page to pay.')
         else
-          '${tr(context, '交接碼', 'Exchange code')}：${latest.pickupCode}',
+          '交接碼 / Exchange code：${latest.pickupCode}',
       ].join('\n'),
       kind: needsPay ? 'pay' : 'code',
       bookingId: booking.id,
@@ -369,88 +407,12 @@ class _Bubble extends StatelessWidget {
       itemId: booking.itemId,
       sender: _owner(catalog, booking),
       body: [
-        tr(context, '你的租借已被拒絕。', 'Your rental was rejected.'),
-        if (why.isNotEmpty) '${tr(context, '原因', 'Reason')}：$why',
+        both('你的租借已被拒絕。', 'Your rental was rejected.'),
+        if (why.isNotEmpty) '原因 / Reason：$why',
       ].join('\n'),
       kind: 'rejected',
       bookingId: booking.id,
     );
-    await onChanged();
-  }
-
-  Future<void> _pay(BuildContext context, ShareStore catalog, Booking booking) async {
-    catalog.payDeposit(booking.id);
-    final latest = catalog.bookingById(booking.id);
-    await auth.sendMessage(
-      itemId: booking.itemId,
-      sender: booking.borrower,
-      body: [
-        tr(context, '租金已付。', 'The rent is paid.'),
-        '${tr(context, '交接碼', 'Exchange code')}：${latest.pickupCode}',
-      ].join('\n'),
-      kind: 'code',
-      bookingId: booking.id,
-    );
-    await onChanged();
-  }
-
-  Future<void> _handedOver(BuildContext context, ShareStore catalog, Booking booking) async {
-    catalog.markPickedUp(booking.id);
-    await auth.sendMessage(
-      itemId: booking.itemId,
-      sender: _owner(catalog, booking),
-      body: [
-        tr(context, '物主已確認交件。', 'The owner confirmed the handover.'),
-        '${tr(context, '交接碼', 'Exchange code')}：${booking.pickupCode}',
-      ].join('\n'),
-      kind: 'rented',
-      bookingId: booking.id,
-    );
-    await onChanged();
-  }
-
-  Future<void> _returned(BuildContext context, ShareStore catalog, Booking booking) async {
-    catalog.markReturned(booking.id, '完好');
-    await auth.sendMessage(
-      itemId: booking.itemId,
-      sender: _owner(catalog, booking),
-      body: tr(
-        context,
-        '已確認歸還。可以留下評價，也可以不寫。',
-        'Return confirmed. A review is optional.',
-      ),
-      kind: 'returned',
-      bookingId: booking.id,
-    );
-    await onChanged();
-  }
-
-  Future<void> _comment(BuildContext context, ShareStore catalog, Booking booking) async {
-    final text = TextEditingController();
-    final comment = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr(context, '評價（可留空）', 'Review (optional)')),
-        content: TextField(
-          controller: text,
-          maxLines: 3,
-          decoration: InputDecoration(hintText: tr(context, '可以留空', 'You can leave this blank')),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, ''),
-            child: Text(tr(context, '略過', 'Skip')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, text.text.trim()),
-            child: Text(tr(context, '送出', 'Send')),
-          ),
-        ],
-      ),
-    );
-    text.dispose();
-    if (comment == null || comment.isEmpty) return;
-    catalog.saveReview(booking.id, 5, comment);
     await onChanged();
   }
 }

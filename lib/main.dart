@@ -493,6 +493,14 @@ ThemeData _theme() {
         borderSide: BorderSide.none,
       ),
     ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: green,
+        minimumSize: const Size(64, 52),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: green,

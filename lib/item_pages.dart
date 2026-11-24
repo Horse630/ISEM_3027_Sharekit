@@ -383,14 +383,18 @@ class _BookPageState extends State<BookPage> {
       return;
     }
     final note = _note.text.trim();
+    final payLabel = '${_pay.label} / ${_pay.en}';
+    final rent = item.isFree
+        ? '免費 / Free'
+        : money(quoteFor(item, booking.start, booking.end).rent);
     final lines = [
-      tr(context, '租借申請', 'Rental request'),
-      '${tr(context, '物品', 'Item')}：${item.name}',
-      '${tr(context, '租借人', 'Renter')}：${user.label}',
-      '${tr(context, '日期', 'Dates')}：${formatDate(booking.start)} – ${formatDate(booking.end)}',
-      '${tr(context, '付款', 'Payment')}：${tr(context, _pay.label, _pay.en)}',
-      '${tr(context, '租金', 'Rent')}：${item.isFree ? tr(context, '免費', 'Free') : money(quoteFor(item, booking.start, booking.end).rent)}',
-      if (note.isNotEmpty) '${tr(context, '備註', 'Note')}：$note',
+      both('租借申請', 'Rental request'),
+      '物品 / Item：${item.name}',
+      '租借人 / Renter：${user.label}',
+      '日期 / Dates：${formatDate(booking.start)} – ${formatDate(booking.end)}',
+      '付款 / Payment：$payLabel',
+      '租金 / Rent：$rent',
+      if (note.isNotEmpty) '備註 / Note：$note',
     ];
     await account.auth.sendMessage(
       itemId: item.id,

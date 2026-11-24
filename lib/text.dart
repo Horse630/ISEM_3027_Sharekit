@@ -20,6 +20,8 @@ String tr(BuildContext context, String zh, String en) {
   return AppLang.of(context) ? en : zh;
 }
 
+String both(String zh, String en) => '$zh\n$en';
+
 String shown(BuildContext context, String message) {
   if (!AppLang.of(context)) return message;
   return switch (message) {

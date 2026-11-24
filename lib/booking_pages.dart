@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'main.dart';
 import 'models.dart';
+import 'store.dart';
 import 'text.dart';
 import 'widgets.dart';
 
@@ -276,40 +277,96 @@ class _ActionBar extends StatelessWidget {
     final item = store.findItem(booking.itemId);
     final isOwner = item != null && (item.owner == user.label || item.owner == user.name);
     if (!isOwner && store.needsOnlinePayment(booking)) {
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: FilledButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => DepositPage(bookingId: bookingId)),
-              );
-            },
-            child: Text(tr(context, '完成付款', 'Pay now')),
-          ),
-        ),
+      return _bar(
+        context,
+        '完成付款',
+        'Pay now',
+        () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => DepositPage(bookingId: bookingId)),
+          );
+        },
       );
     }
-    if (!isOwner) return const SizedBox.shrink();
+    final canReview = booking.stage == BookingStage.returned &&
+        (booking.comment ?? '').trim().isEmpty;
+    if (!isOwner) {
+      if (!canReview) return const SizedBox.shrink();
+      return _bar(context, '寫評價', 'Write a review', () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ReviewPage(bookingId: bookingId)),
+        );
+      });
+    }
     final (zh, en, action) = switch (booking.stage) {
       BookingStage.reserved when store.codeReady(booking) => (
         '確認已借出',
         'Confirm handed over',
-        () => store.markPickedUp(bookingId),
+        () => _handedOver(context, store, bookingId),
       ),
       BookingStage.pickedUp => (
         '確認歸還',
         'Confirm return',
-        () => store.markReturned(bookingId, '完好'),
+        () => _returned(context, store, bookingId),
+      ),
+      BookingStage.returned when canReview => (
+        '寫評價',
+        'Write a review',
+        () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => ReviewPage(bookingId: bookingId)),
+          );
+        },
       ),
       _ => (null, null, null),
     };
     if (zh == null || en == null || action == null) return const SizedBox.shrink();
+    return _bar(context, zh, en, action);
+  }
+
+  Widget _bar(BuildContext context, String zh, String en, Future<void> Function() action) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-        child: FilledButton(onPressed: action, child: Text(tr(context, zh, en))),
+        child: FilledButton(
+          onPressed: () {
+            action();
+          },
+          child: Text(tr(context, zh, en)),
+        ),
       ),
+    );
+  }
+
+  Future<void> _handedOver(BuildContext context, ShareStore store, String bookingId) async {
+    store.markPickedUp(bookingId);
+    final booking = store.bookingById(bookingId);
+    final owner = store.findItem(booking.itemId)?.owner ?? '';
+    await AccountScope.of(context).auth.sendMessage(
+      itemId: booking.itemId,
+      sender: owner,
+      body: [
+        both('物主已確認交件。', 'The owner confirmed the handover.'),
+        '交接碼 / Exchange code：${booking.pickupCode}',
+      ].join('\n'),
+      kind: 'rented',
+      bookingId: booking.id,
+    );
+  }
+
+  Future<void> _returned(BuildContext context, ShareStore store, String bookingId) async {
+    store.markReturned(bookingId, '完好');
+    final booking = store.bookingById(bookingId);
+    final owner = store.findItem(booking.itemId)?.owner ?? '';
+    await AccountScope.of(context).auth.sendMessage(
+      itemId: booking.itemId,
+      sender: owner,
+      body: both(
+        '已確認歸還。可以留下評價，也可以不寫。',
+        'Return confirmed. A review is optional.',
+      ),
+      kind: 'returned',
+      bookingId: booking.id,
     );
   }
 
@@ -473,9 +530,20 @@ class DepositPage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               store.payDeposit(bookingId);
-              Navigator.of(context).pop();
+              final latest = store.bookingById(bookingId);
+              await AccountScope.of(context).auth.sendMessage(
+                itemId: latest.itemId,
+                sender: latest.borrower,
+                body: [
+                  both('租金已付。', 'The rent is paid.'),
+                  '交接碼 / Exchange code：${latest.pickupCode}',
+                ].join('\n'),
+                kind: 'code',
+                bookingId: latest.id,
+              );
+              if (context.mounted) Navigator.of(context).pop();
             },
             child: Text(tr(context, '確認付款', 'Confirm payment')),
           ),
@@ -505,13 +573,10 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   void _submit() {
-    if (_comment.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr(context, '請寫一句使用感受。', 'Write a short note.'))));
-      return;
+    final comment = _comment.text.trim();
+    if (comment.isNotEmpty) {
+      ShareKitScope.of(context).saveReview(widget.bookingId, _stars, comment);
     }
-    ShareKitScope.of(context)
-        .saveReview(widget.bookingId, _stars, _comment.text);
     Navigator.of(context).pop();
   }
 
@@ -529,7 +594,7 @@ class _ReviewPageState extends State<ReviewPage> {
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
-          Text(tr(context, '交接完成後留低評價，下一個借用的人會看到。', 'The next borrower will see this review on the item.')),
+          Text(tr(context, '評價可以留空。寫了的話，下一個借用的人會在物品頁看到。', 'A review is optional. If you write one, the next borrower will see it.')),
           const SizedBox(height: 16),
           Row(
             children: [
