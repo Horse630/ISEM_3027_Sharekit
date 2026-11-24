@@ -188,14 +188,23 @@ class BookingDetailPage extends StatelessWidget {
                 'Return condition: ${conditionLabel(context, booking.returnCondition ?? '')}',
               ),
             ),
-          if (booking.stage == BookingStage.reviewed) ...[
+          if ((booking.comment ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              tr(context, '你的評價  ${'★' * (booking.stars ?? 0)}', 'Your review  ${'★' * (booking.stars ?? 0)}'),
+              tr(context, '借用者對物品的評價  ${'★' * (booking.stars ?? 0)}', 'Borrower’s item review  ${'★' * (booking.stars ?? 0)}'),
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
             Text(booking.comment ?? ''),
+          ],
+          if ((booking.ownerReviewComment ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              tr(context, '物主對借用者的評價  ${'★' * (booking.ownerReviewStars ?? 0)}', 'Owner’s borrower review  ${'★' * (booking.ownerReviewStars ?? 0)}'),
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Text(booking.ownerReviewComment ?? ''),
           ],
           const SizedBox(height: 12),
           OutlinedButton(
@@ -288,11 +297,14 @@ class _ActionBar extends StatelessWidget {
         },
       );
     }
-    final canReview = booking.stage == BookingStage.returned &&
-        (booking.comment ?? '').trim().isEmpty;
+    final returned = booking.stage == BookingStage.returned || booking.stage == BookingStage.reviewed;
+    final canReviewItem = returned && (booking.comment ?? '').trim().isEmpty &&
+        store.isBorrower(booking, user.label, user.name);
+    final canReviewBorrower = returned && booking.borrower.isNotEmpty &&
+        (booking.ownerReviewComment ?? '').trim().isEmpty;
     if (!isOwner) {
-      if (!canReview) return const SizedBox.shrink();
-      return _bar(context, '寫評價', 'Write a review', () async {
+      if (!canReviewItem) return const SizedBox.shrink();
+      return _bar(context, '評價物品', 'Review item', () async {
         await Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => ReviewPage(bookingId: bookingId)),
         );
@@ -309,9 +321,9 @@ class _ActionBar extends StatelessWidget {
         'Confirm return',
         () => _returned(context, store, bookingId),
       ),
-      BookingStage.returned when canReview => (
-        '寫評價',
-        'Write a review',
+      BookingStage.returned || BookingStage.reviewed when canReviewBorrower => (
+        '評價借用者',
+        'Review borrower',
         () async {
           await Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => ReviewPage(bookingId: bookingId)),
@@ -574,8 +586,22 @@ class _ReviewPageState extends State<ReviewPage> {
 
   void _submit() {
     final comment = _comment.text.trim();
-    if (comment.isNotEmpty) {
-      ShareKitScope.of(context).saveReview(widget.bookingId, _stars, comment);
+    if (comment.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tr(context, '請先填寫評價內容。', 'Please write a review.')),
+      ));
+      return;
+    }
+    final user = AccountScope.of(context).user;
+    final saved = ShareKitScope.of(context).saveReview(
+      widget.bookingId, _stars, comment,
+      reviewerLabel: user.label, reviewerLogin: user.name,
+    );
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tr(context, '無法送出評價，請檢查預約狀態。', 'Could not submit this review. Check the booking status.')),
+      ));
+      return;
     }
     Navigator.of(context).pop();
   }
@@ -584,17 +610,21 @@ class _ReviewPageState extends State<ReviewPage> {
   Widget build(BuildContext context) {
     final booking = ShareKitScope.of(context).bookingById(widget.bookingId);
     final item = ShareKitScope.of(context).itemById(booking.itemId);
+    final user = AccountScope.of(context).user;
+    final isOwner = item.owner == user.label || item.owner == user.name;
     return Scaffold(
-      appBar: AppBar(title: Text(tr(context, '評價', 'Review'))),
+      appBar: AppBar(title: Text(isOwner ? tr(context, '評價借用者', 'Review borrower') : tr(context, '評價物品', 'Review item'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
           Text(
-            item.name,
+            isOwner ? booking.borrower : item.name,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
-          Text(tr(context, '評價可以留空。寫了的話，下一個借用的人會在物品頁看到。', 'A review is optional. If you write one, the next borrower will see it.')),
+          Text(isOwner
+              ? tr(context, '這則評價會顯示在借用者的個人資料。', 'This review appears on the borrower’s profile.')
+              : tr(context, '這則評價會顯示在物品頁。', 'This review appears on the item page.')),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -615,7 +645,9 @@ class _ReviewPageState extends State<ReviewPage> {
             controller: _comment,
             maxLines: 4,
             decoration: InputDecoration(
-              hintText: tr(context, '例如：取件準時，電鑽電量充足。', 'For example: Pickup was on time.'),
+              hintText: isOwner
+                  ? tr(context, '例如：準時歸還，愛惜物品。', 'For example: Returned on time and took care of the item.')
+                  : tr(context, '例如：取件準時，電鑽電量充足。', 'For example: Pickup was on time.'),
             ),
           ),
           const SizedBox(height: 16),

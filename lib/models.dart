@@ -284,6 +284,10 @@ class Booking {
     this.payMethod = PayMethod.online,
     this.deposit = DepositStatus.none,
     this.borrower = '',
+    this.borrowerAccount = '',
+    this.ownerReviewStars,
+    this.ownerReviewComment,
+    this.ownerReviewAuthor,
     this.returnCondition,
     this.stars,
     this.comment,
@@ -300,6 +304,10 @@ class Booking {
   final PayMethod payMethod;
   final DepositStatus deposit;
   final String borrower;
+  final String borrowerAccount;
+  final int? ownerReviewStars;
+  final String? ownerReviewComment;
+  final String? ownerReviewAuthor;
   final String? returnCondition;
   final int? stars;
   final String? comment;
@@ -316,6 +324,10 @@ class Booking {
     String? comment,
     String? issue,
     String? borrower,
+    String? borrowerAccount,
+    int? ownerReviewStars,
+    String? ownerReviewComment,
+    String? ownerReviewAuthor,
   }) {
     return Booking(
       id: id,
@@ -328,6 +340,10 @@ class Booking {
       payMethod: payMethod ?? this.payMethod,
       deposit: deposit ?? this.deposit,
       borrower: borrower ?? this.borrower,
+      borrowerAccount: borrowerAccount ?? this.borrowerAccount,
+      ownerReviewStars: ownerReviewStars ?? this.ownerReviewStars,
+      ownerReviewComment: ownerReviewComment ?? this.ownerReviewComment,
+      ownerReviewAuthor: ownerReviewAuthor ?? this.ownerReviewAuthor,
       returnCondition: returnCondition ?? this.returnCondition,
       stars: stars ?? this.stars,
       comment: comment ?? this.comment,

@@ -84,7 +84,12 @@ class ShareStore extends ChangeNotifier {
       if (booking == null ||
           booking.stage != next.stage ||
           booking.deposit != next.deposit ||
-          booking.borrower != next.borrower) {
+          booking.borrower != next.borrower ||
+          booking.borrowerAccount != next.borrowerAccount ||
+          booking.stars != next.stars || booking.comment != next.comment ||
+          booking.ownerReviewStars != next.ownerReviewStars ||
+          booking.ownerReviewComment != next.ownerReviewComment ||
+          booking.ownerReviewAuthor != next.ownerReviewAuthor) {
         return false;
       }
     }
@@ -113,13 +118,24 @@ class ShareStore extends ChangeNotifier {
 
   bool seesBooking(Booking booking, String name, String login) {
     final names = {name, login};
-    if (booking.borrower.isNotEmpty && names.contains(booking.borrower)) {
+    if (isBorrower(booking, name, login)) {
       return true;
     }
     final item = findItem(booking.itemId);
     if (item != null && names.contains(item.owner)) return true;
     return booking.borrower.isEmpty;
   }
+
+  bool isBorrower(Booking booking, String label, String login) =>
+      booking.borrowerAccount.isNotEmpty
+          ? booking.borrowerAccount == login
+          : booking.borrower.isNotEmpty &&
+              (booking.borrower == label || booking.borrower == login);
+
+  List<Booking> reviewsForBorrower(String label, String login) => bookings
+      .where((booking) => isBorrower(booking, label, login) &&
+          (booking.ownerReviewComment ?? '').trim().isNotEmpty)
+      .toList();
 
   DateTime nextOpenDay(String itemId) {
     var day = dateOnly(DateTime.now()).add(const Duration(days: 1));
@@ -179,7 +195,7 @@ class ShareStore extends ChangeNotifier {
     return results;
   }
 
-  void renameOwner(String from, String to) {
+  void renameOwner(String from, String to, {String login = ''}) {
     final next = to.trim();
     if (from.trim().isEmpty || next.isEmpty || from == next) return;
     var changed = false;
@@ -187,6 +203,14 @@ class ShareStore extends ChangeNotifier {
       if (_items[index].owner != from) continue;
       _items[index] = _items[index].copyWith(owner: next);
       changed = true;
+    }
+    for (var index = 0; index < _bookings.length; index++) {
+      final booking = _bookings[index];
+      if (booking.borrower == from &&
+          (booking.borrowerAccount.isEmpty || booking.borrowerAccount == login)) {
+        _bookings[index] = booking.copyWith(borrower: next);
+        changed = true;
+      }
     }
     if (!changed) return;
     notifyListeners();
@@ -207,6 +231,7 @@ class ShareStore extends ChangeNotifier {
     required DateTime end,
     required String note,
     required String borrower,
+    String borrowerAccount = '',
     required PayMethod payMethod,
   }) {
     final from = dateOnly(start);
@@ -228,6 +253,7 @@ class ShareStore extends ChangeNotifier {
       payMethod: payMethod,
       deposit: needsPay ? DepositStatus.pending : DepositStatus.none,
       borrower: borrower,
+      borrowerAccount: borrowerAccount,
     );
     _bookings.add(booking);
     notifyListeners();
@@ -308,28 +334,43 @@ class ShareStore extends ChangeNotifier {
     );
   }
 
-  void saveReview(String bookingId, int stars, String comment) {
+  bool saveReview(String bookingId, int stars, String comment, {
+    required String reviewerLabel,
+    required String reviewerLogin,
+  }) {
     final booking = bookingById(bookingId);
-    _update(
-      bookingId,
-      (current) => current.copyWith(
-        stage: BookingStage.reviewed,
-        stars: stars,
-        comment: comment.trim(),
-      ),
-    );
-    final index = _items.indexWhere((item) => item.id == booking.itemId);
-    if (index == -1) return;
-    final item = _items[index];
+    final itemIndex = _items.indexWhere((item) => item.id == booking.itemId);
+    final text = comment.trim();
+    if (itemIndex == -1 || stars < 1 || stars > 5 || text.isEmpty ||
+        (booking.stage != BookingStage.returned && booking.stage != BookingStage.reviewed)) {
+      return false;
+    }
+    final item = _items[itemIndex];
+    final isOwner = item.owner == reviewerLabel || item.owner == reviewerLogin;
+    final borrower = isBorrower(booking, reviewerLabel, reviewerLogin);
+    if (isOwner && !borrower) {
+      if (booking.borrower.isEmpty || (booking.ownerReviewComment ?? '').trim().isNotEmpty) return false;
+      _update(bookingId, (current) => current.copyWith(
+        ownerReviewStars: stars,
+        ownerReviewComment: text,
+        ownerReviewAuthor: reviewerLabel,
+      ));
+      return true;
+    }
+    if (!borrower || isOwner || (booking.comment ?? '').trim().isNotEmpty) return false;
     final nextCount = item.reviewCount + 1;
     final nextRating = ((item.rating * item.reviewCount) + stars) / nextCount;
-    _items[index] = item.copyWith(
+    _items[itemIndex] = item.copyWith(
       rating: double.parse(nextRating.toStringAsFixed(1)),
       reviewCount: nextCount,
       handovers: item.handovers + 1,
     );
-    notifyListeners();
-    _persist();
+    _update(bookingId, (current) => current.copyWith(
+      stage: BookingStage.reviewed,
+      stars: stars,
+      comment: text,
+    ));
+    return true;
   }
 
   void addItem({

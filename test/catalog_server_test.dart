@@ -66,6 +66,18 @@ void main() {
       district: HkDistrict.kowloonCity,
       handover: HandoverMethod.faceToFace,
     );
+    final sharedItem = firefox.items.firstWhere((entry) => entry.name == 'Firefox 上架的露營燈');
+    final day = DateTime(2026, 7, 10);
+    final booking = firefox.createBooking(
+      itemId: sharedItem.id, start: day, end: day, note: '',
+      borrower: '借用者', borrowerAccount: 'borrower123',
+      payMethod: PayMethod.face,
+    )!;
+    expect(firefox.saveReview(booking.id, 5, 'too early', reviewerLabel: 'Isem_3027', reviewerLogin: 'Isem_3027'), isFalse);
+    firefox.markReturned(booking.id, '完好');
+    expect(firefox.saveReview(booking.id, 5, '準時歸還', reviewerLabel: 'Isem_3027', reviewerLogin: 'Isem_3027'), isTrue);
+    expect(firefox.saveReview(booking.id, 4, 'duplicate', reviewerLabel: 'Isem_3027', reviewerLogin: 'Isem_3027'), isFalse);
+    expect(firefox.saveReview(booking.id, 4, 'stranger', reviewerLabel: '陌生人', reviewerLogin: 'stranger'), isFalse);
     await firefox.persisted;
 
     final edgeAuth = AuthRepository(databasePath: nextDatabase());
@@ -80,6 +92,19 @@ void main() {
     final item = edge.items.firstWhere((entry) => entry.name == 'Firefox 上架的露營燈');
     expect(item.address, '九龍塘2座');
     expect(item.photoBytes, Uint8List.fromList([4, 5, 6]));
+    final received = edge.bookingById(booking.id);
+    expect(received.borrowerAccount, 'borrower123');
+    expect(received.payMethod, PayMethod.face);
+    expect(received.ownerReviewComment, '準時歸還');
+    expect(edge.reviewsForBorrower('新名稱', 'borrower123'), hasLength(1));
+    expect(edge.reviewsForBorrower('借用者', 'other'), isEmpty);
+    expect(edge.saveReview(booking.id, 5, '物品很好', reviewerLabel: '新名稱', reviewerLogin: 'borrower123'), isTrue);
+    expect(edge.saveReview(booking.id, 5, 'duplicate', reviewerLabel: '新名稱', reviewerLogin: 'borrower123'), isFalse);
+    await edge.persisted;
+    final remoteSnapshot = await remote!.load();
+    final reviewed = remoteSnapshot.bookings.singleWhere((entry) => entry.id == booking.id);
+    expect(reviewed.comment, '物品很好');
+    expect(reviewed.ownerReviewComment, '準時歸還');
     await firefoxAuth.close();
     await edgeAuth.close();
   });

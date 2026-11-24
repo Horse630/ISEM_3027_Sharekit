@@ -8,6 +8,7 @@ import 'auth_repository.dart';
 import 'booking_pages.dart';
 import 'catalog_gateway.dart';
 import 'chat_center.dart';
+import 'main.dart';
 import 'models.dart';
 import 'store.dart';
 import 'text.dart';
@@ -336,9 +337,13 @@ class _Bubble extends StatelessWidget {
         child: Text(tr(context, '前往確認歸還', 'Open return')),
       );
     }
+    final user = AccountScope.of(context).user;
     if (message.kind == 'returned' &&
-        booking.stage == BookingStage.returned &&
-        (booking.comment ?? '').isEmpty) {
+        (booking.stage == BookingStage.returned || booking.stage == BookingStage.reviewed) &&
+        (isOwner
+            ? booking.borrower.isNotEmpty && (booking.ownerReviewComment ?? '').trim().isEmpty
+            : catalog.isBorrower(booking, user.label, user.name) &&
+                (booking.comment ?? '').trim().isEmpty)) {
       return FilledButton(
         style: _chatButton(filled: true),
         onPressed: () => _openBooking(context, booking!.id),

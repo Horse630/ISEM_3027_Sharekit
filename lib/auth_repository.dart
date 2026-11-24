@@ -109,7 +109,7 @@ class AuthRepository {
         p.join(await getDatabasesPath(), 'sharekit.db');
     _db = await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -204,6 +204,19 @@ class AuthRepository {
           }
           if (!messageColumns.any((row) => row['name'] == 'booking_id')) {
             await db.execute("ALTER TABLE messages ADD COLUMN booking_id TEXT NOT NULL DEFAULT ''");
+          }
+        }
+        if (oldVersion < 9) {
+          final columns = await db.rawQuery('PRAGMA table_info(bookings)');
+          for (final entry in <String, String>{
+            'borrower_account': "TEXT NOT NULL DEFAULT ''",
+            'owner_review_stars': 'INTEGER',
+            'owner_review_comment': 'TEXT',
+            'owner_review_author': 'TEXT',
+          }.entries) {
+            if (!columns.any((row) => row['name'] == entry.key)) {
+              await db.execute('ALTER TABLE bookings ADD COLUMN ${entry.key} ${entry.value}');
+            }
           }
         }
       },
@@ -453,6 +466,10 @@ class AuthRepository {
         note TEXT NOT NULL,
         deposit TEXT NOT NULL,
         borrower TEXT NOT NULL DEFAULT '',
+        borrower_account TEXT NOT NULL DEFAULT '',
+        owner_review_stars INTEGER,
+        owner_review_comment TEXT,
+        owner_review_author TEXT,
         pay_method TEXT NOT NULL DEFAULT 'online',
         return_condition TEXT,
         stars INTEGER,

@@ -43,8 +43,13 @@ def connect():
           stage TEXT NOT NULL,
           pickup_code TEXT NOT NULL,
           note TEXT NOT NULL,
+          pay_method TEXT NOT NULL DEFAULT 'online',
           deposit TEXT NOT NULL,
           borrower TEXT NOT NULL DEFAULT '',
+          borrower_account TEXT NOT NULL DEFAULT '',
+          owner_review_stars INTEGER,
+          owner_review_comment TEXT,
+          owner_review_author TEXT,
           return_condition TEXT,
           stars INTEGER,
           comment TEXT,
@@ -66,6 +71,15 @@ def connect():
         db.execute(
             "ALTER TABLE bookings ADD COLUMN borrower TEXT NOT NULL DEFAULT ''"
         )
+    for name, definition in (
+        ('pay_method', "TEXT NOT NULL DEFAULT 'online'"),
+        ('borrower_account', "TEXT NOT NULL DEFAULT ''"),
+        ('owner_review_stars', 'INTEGER'),
+        ('owner_review_comment', 'TEXT'),
+        ('owner_review_author', 'TEXT'),
+    ):
+        if name not in booking_columns:
+            db.execute(f'ALTER TABLE bookings ADD COLUMN {name} {definition}')
     return db
 
 
@@ -120,8 +134,9 @@ def replace(db, payload):
             """
             INSERT INTO bookings (
               id, item_id, start_date, end_date, stage, pickup_code, note,
-              deposit, borrower, return_condition, stars, comment, issue
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              pay_method, deposit, borrower, borrower_account, owner_review_stars,
+              owner_review_comment, owner_review_author, return_condition, stars, comment, issue
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 booking["id"],
@@ -131,8 +146,13 @@ def replace(db, payload):
                 booking["stage"],
                 booking["pickup_code"],
                 booking["note"],
+                booking.get("pay_method") or "online",
                 booking["deposit"],
                 booking.get("borrower") or "",
+                booking.get("borrower_account") or "",
+                booking.get("owner_review_stars"),
+                booking.get("owner_review_comment"),
+                booking.get("owner_review_author"),
                 booking.get("return_condition"),
                 booking.get("stars"),
                 booking.get("comment"),

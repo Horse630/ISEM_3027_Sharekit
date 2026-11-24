@@ -372,6 +372,7 @@ class _BookPageState extends State<BookPage> {
       end: _end,
       note: _note.text,
       borrower: user.label,
+      borrowerAccount: user.name,
       payMethod: _pay,
     );
     if (booking == null) {

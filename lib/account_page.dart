@@ -140,7 +140,7 @@ class _SettingsPageState extends State<SettingsPage> {
         district: _district,
       );
       if (!mounted) return;
-      widget.store.renameOwner(previous, user.label);
+      widget.store.renameOwner(previous, user.label, login: user.name);
       widget.onChanged(user);
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -172,6 +172,7 @@ class _SettingsPageState extends State<SettingsPage> {
           final mine = widget.store.items
               .where((item) => item.owner == widget.user.label)
               .length;
+          final reviews = widget.store.reviewsForBorrower(widget.user.label, widget.user.name);
           return ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
@@ -227,6 +228,21 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             style: const TextStyle(color: Color(0xFF5E6A64), height: 1.4),
           ),
+          const SizedBox(height: 16),
+          Text(tr(context, '物主給我的評價', 'Reviews from owners'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          if (reviews.isEmpty)
+            Text(tr(context, '尚未收到評價。', 'No reviews yet.'))
+          else
+            for (final review in reviews)
+              Card(
+                child: ListTile(
+                  title: Text('${'★' * (review.ownerReviewStars ?? 0)}  ${review.ownerReviewAuthor ?? tr(context, '物主', 'Owner')}'),
+                  subtitle: Text('${widget.store.findItem(review.itemId)?.name ?? review.itemId}\n${review.ownerReviewComment}'),
+                  isThreeLine: true,
+                ),
+              ),
           const SizedBox(height: 16),
           TextField(
             controller: _name,

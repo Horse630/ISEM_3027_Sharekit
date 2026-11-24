@@ -140,7 +140,7 @@ void main() {
     store.markPickedUp(booking.id);
     expect(store.bookingById(booking.id).stage, BookingStage.pickedUp);
     store.markReturned(booking.id, '完好');
-    store.saveReview(booking.id, 5, '取件準時，工具齊全。');
+    store.saveReview(booking.id, 5, '取件準時，工具齊全。', reviewerLabel: 'Isem_3027', reviewerLogin: 'Isem_3027');
     expect(store.bookingById(booking.id).stage, BookingStage.reviewed);
     expect(store.bookingById(booking.id).comment, '取件準時，工具齊全。');
     await tester.runAsync(() => store.persisted);
