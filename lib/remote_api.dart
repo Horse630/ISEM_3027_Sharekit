@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class RemoteApi {
-  static const root = 'http://127.0.0.1:8780/api';
+  static const root = 'https://isem-3027-sharekit.onrender.com/api';
 
   Future<List<Map<String, dynamic>>> list(String collection) async {
     final response = await http
         .get(Uri.parse('$root/$collection'))
-        .timeout(const Duration(seconds: 12));
+        .timeout(const Duration(seconds: 75));
     if (response.statusCode == 404) return const [];
     if (response.statusCode != 200) {
       throw StateError('共用資料庫讀取失敗');
@@ -31,7 +31,7 @@ class RemoteApi {
           headers: const {'Content-Type': 'application/json'},
           body: jsonEncode(body),
         )
-        .timeout(const Duration(seconds: 12));
+        .timeout(const Duration(seconds: 75));
     if (response.statusCode != 201 && response.statusCode != 200) {
       throw StateError('共用資料庫寫入失敗');
     }
@@ -50,7 +50,7 @@ class RemoteApi {
           headers: const {'Content-Type': 'application/json'},
           body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 12));
+        .timeout(const Duration(seconds: 75));
     if (response.statusCode != 200) {
       throw StateError('共用資料庫寫入失敗');
     }

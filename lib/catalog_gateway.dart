@@ -119,13 +119,14 @@ class RemoteCatalog implements CatalogGateway {
 }
 
 class PublicCatalog implements CatalogGateway {
-  static const documentUrl = 'http://127.0.0.1:8780/api/catalog';
+  static const documentUrl =
+      'https://isem-3027-sharekit.onrender.com/api/catalog';
 
   static Future<PublicCatalog?> connect() async {
     try {
       final response = await http
           .get(Uri.parse(documentUrl))
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 75));
       if (response.statusCode != 200) return null;
       return PublicCatalog();
     } catch (_) {
@@ -137,7 +138,7 @@ class PublicCatalog implements CatalogGateway {
   Future<CatalogSnapshot> load() async {
     final response = await http
         .get(Uri.parse(documentUrl))
-        .timeout(const Duration(seconds: 8));
+        .timeout(const Duration(seconds: 75));
     if (response.statusCode != 200) {
       throw StateError('共用資料庫讀取失敗');
     }
@@ -164,7 +165,7 @@ class PublicCatalog implements CatalogGateway {
           headers: const {'Content-Type': 'application/json'},
           body: jsonEncode(snapshotToJson(snapshot)),
         )
-        .timeout(const Duration(seconds: 12));
+        .timeout(const Duration(seconds: 75));
   }
 }
 
