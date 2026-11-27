@@ -241,12 +241,15 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  final Map<String, BookingStage> _stages = {};
+  var _stagesReady = false;
 
   @override
   void initState() {
     super.initState();
     widget.store.addListener(_syncTab);
     widget.chat.bind(widget.auth, widget.user.label);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _notePickups());
   }
 
   @override
@@ -266,9 +269,65 @@ class _HomeShellState extends State<HomeShell> {
 
   void _syncTab() {
     final next = widget.store.requestedTab;
-    if (next == null || !mounted) return;
-    widget.store.requestedTab = null;
-    setState(() => _index = next);
+    if (next != null && mounted) {
+      widget.store.requestedTab = null;
+      setState(() => _index = next);
+    }
+    _notePickups();
+  }
+
+  void _notePickups() {
+    if (!mounted) return;
+    final user = widget.user;
+    Booking? noticed;
+    var ownerSide = false;
+    for (final booking in widget.store.bookings) {
+      final item = widget.store.findItem(booking.itemId);
+      final owner = item != null && (item.owner == user.label || item.owner == user.name);
+      final borrower = widget.store.isBorrower(booking, user.label, user.name);
+      final previous = _stages[booking.id];
+      if (_stagesReady &&
+          (owner || borrower) &&
+          previous != null &&
+          previous != BookingStage.pickedUp &&
+          booking.stage == BookingStage.pickedUp) {
+        noticed = booking;
+        ownerSide = owner && !borrower;
+      }
+      _stages[booking.id] = booking.stage;
+    }
+    if (!_stagesReady) {
+      _stagesReady = true;
+      return;
+    }
+    final booking = noticed;
+    if (booking == null) return;
+    final itemName = widget.store.findItem(booking.itemId)?.name ?? '';
+    final asOwner = ownerSide;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(tr(dialogContext, '已取件', 'Picked up')),
+          content: Text(
+            asOwner
+                ? tr(dialogContext, '「$itemName」已確認取件。', '“$itemName” has been picked up.')
+                : tr(
+                    dialogContext,
+                    '「$itemName」已取件。歸還時請向物主出示歸還碼。',
+                    '“$itemName” has been picked up. Show the return code when you bring it back.',
+                  ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(tr(dialogContext, '知道了', 'OK')),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   @override
@@ -282,7 +341,7 @@ class _HomeShellState extends State<HomeShell> {
         user: widget.user,
       ),
       const BookingsPage(),
-      ListItemPage(ownerName: widget.user.label),
+      ListItemPage(ownerName: widget.user.label, ui: widget.ui),
       SettingsPage(
         user: widget.user,
         auth: widget.auth,
@@ -347,7 +406,7 @@ class _HomeShellState extends State<HomeShell> {
                     children: [
                       accountBar,
                       Expanded(
-                        child: IndexedStack(index: _index, children: pages),
+                        child: _FadeTabs(index: _index, children: pages),
                       ),
                     ],
                   ),
@@ -368,7 +427,7 @@ class _HomeShellState extends State<HomeShell> {
             children: [
               accountBar,
               Expanded(
-                child: IndexedStack(index: _index, children: pages),
+                child: _FadeTabs(index: _index, children: pages),
               ),
             ],
           ),
@@ -467,6 +526,90 @@ class _AccountBar extends StatelessWidget {
   }
 }
 
+class _FadeTabs extends StatelessWidget {
+  const _FadeTabs({required this.index, required this.children});
+
+  final int index;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        for (var i = 0; i < children.length; i++)
+          Offstage(
+            offstage: i != index,
+            child: TickerMode(
+              enabled: i == index,
+              child: _FadeIn(active: i == index, child: children[i]),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _FadeIn extends StatefulWidget {
+  const _FadeIn({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_FadeIn> createState() => _FadeInState();
+}
+
+class _FadeInState extends State<_FadeIn> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+    value: widget.active ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(_FadeIn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _controller.forward(from: 0);
+    } else if (!widget.active) {
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(opacity: _controller, child: widget.child);
+  }
+}
+
+class _SharePageTransitions extends PageTransitionsBuilder {
+  const _SharePageTransitions();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+    return FadeTransition(
+      opacity: curved,
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.03), end: Offset.zero).animate(curved),
+        child: child,
+      ),
+    );
+  }
+}
+
 class ShareKitScrollBehavior extends MaterialScrollBehavior {
   const ShareKitScrollBehavior();
 
@@ -492,6 +635,15 @@ ThemeData _theme() {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: paper,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: _SharePageTransitions(),
+        TargetPlatform.iOS: _SharePageTransitions(),
+        TargetPlatform.macOS: _SharePageTransitions(),
+        TargetPlatform.windows: _SharePageTransitions(),
+        TargetPlatform.linux: _SharePageTransitions(),
+      },
+    ),
     appBarTheme: const AppBarTheme(
       backgroundColor: paper,
       foregroundColor: ink,

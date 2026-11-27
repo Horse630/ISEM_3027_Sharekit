@@ -128,6 +128,7 @@ class _ChatPageState extends State<ChatPage> {
                           for (final message in _messages)
                             _Bubble(
                               message: message,
+                              thread: _messages,
                               mine: message.sender == widget.senderName,
                               isOwner: widget.senderName == widget.ownerName,
                               store: widget.store,
@@ -169,6 +170,30 @@ class _ChatPageState extends State<ChatPage> {
                     icon: const Icon(Icons.attach_file),
                     tooltip: tr(context, '傳送相片', 'Send a photo'),
                   ),
+                  if (widget.store != null)
+                    IconButton(
+                      onPressed: () {
+                        final catalog = widget.store!;
+                        final choices = catalog.items
+                            .where((item) => item.owner == widget.ownerName)
+                            .toList();
+                        final current = catalog.findItem(widget.itemId);
+                        if (current != null && choices.every((item) => item.id != current.id)) {
+                          choices.insert(0, current);
+                        }
+                        if (choices.isEmpty) return;
+                        showPriceOfferDialog(
+                          context,
+                          store: catalog,
+                          auth: widget.auth,
+                          sender: widget.senderName,
+                          choices: choices,
+                          initialId: widget.itemId,
+                        ).then((_) => _load());
+                      },
+                      icon: const Icon(Icons.sell_outlined),
+                      tooltip: tr(context, '提議租金和按金', 'Propose rent and deposit'),
+                    ),
                   Expanded(
                     child: TextField(
                       controller: _text,
@@ -224,6 +249,7 @@ ButtonStyle _chatButton({required bool filled}) {
 class _Bubble extends StatelessWidget {
   const _Bubble({
     required this.message,
+    required this.thread,
     required this.mine,
     required this.isOwner,
     required this.auth,
@@ -232,6 +258,7 @@ class _Bubble extends StatelessWidget {
   });
 
   final ChatMessage message;
+  final List<ChatMessage> thread;
   final bool mine;
   final bool isOwner;
   final ShareStore? store;
@@ -271,7 +298,7 @@ class _Bubble extends StatelessWidget {
                     ),
                   if (message.body.isNotEmpty)
                     Text(
-                      message.body,
+                      message.body.split('\n').where((line) => !line.startsWith('#offer ')).join('\n'),
                       style: TextStyle(color: mine ? Colors.white : const Color(0xFF1B2A24)),
                     ),
                 ],
@@ -289,6 +316,25 @@ class _Bubble extends StatelessWidget {
 
   Widget? _actions(BuildContext context) {
     final catalog = store;
+    if (catalog != null && message.kind == 'offer' && !mine && _offerOpen()) {
+      final offer = _readOffer(message.body);
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilledButton(
+            style: _chatButton(filled: true),
+            onPressed: offer == null ? null : () => _decideOffer(context, catalog, accept: true, offer: offer),
+            child: Text(tr(context, '同意', 'Accept')),
+          ),
+          OutlinedButton(
+            style: _chatButton(filled: false),
+            onPressed: () => _decideOffer(context, catalog, accept: false, offer: (0, 0)),
+            child: Text(tr(context, '拒絕', 'Decline')),
+          ),
+        ],
+      );
+    }
     if (catalog == null || message.bookingId.isEmpty) return null;
     Booking? booking;
     for (final item in catalog.bookings) {
@@ -353,6 +399,45 @@ class _Bubble extends StatelessWidget {
     return null;
   }
 
+  bool _offerOpen() {
+    final key = message.id.toString();
+    return !thread.any(
+      (item) => (item.kind == 'offer-yes' || item.kind == 'offer-no') && item.bookingId == key,
+    );
+  }
+
+  Future<void> _decideOffer(
+    BuildContext context,
+    ShareStore catalog, {
+    required bool accept,
+    required (double?, double) offer,
+  }) async {
+    if (accept) {
+      catalog.applyOffer(
+        itemId: message.itemId,
+        dailyPrice: offer.$1,
+        depositAmount: offer.$2,
+      );
+    }
+    final user = AccountScope.of(context).user;
+    final owner = catalog.findItem(message.itemId)?.owner ?? '';
+    final fromOwner = user.label == owner || user.name == owner;
+    await auth.sendMessage(
+      itemId: message.itemId,
+      sender: user.label,
+      body: accept
+          ? (fromOwner
+              ? both('物主已同意新的租金和按金。', 'The owner accepted the new rent and deposit.')
+              : both('借用者已同意新的租金和按金。', 'The borrower accepted the new rent and deposit.'))
+          : (fromOwner
+              ? both('物主已拒絕這次提議。', 'The owner declined this offer.')
+              : both('借用者已拒絕這次提議。', 'The borrower declined this offer.')),
+      kind: accept ? 'offer-yes' : 'offer-no',
+      bookingId: message.id.toString(),
+    );
+    await onChanged();
+  }
+
   void _openBooking(BuildContext context, String bookingId) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => BookingDetailPage(bookingId: bookingId)),
@@ -375,7 +460,7 @@ class _Bubble extends StatelessWidget {
         if (needsPay)
           both('請到預約頁完成付款。', 'Open the booking page to pay.')
         else
-          '交接碼 / Exchange code：${latest.pickupCode}',
+          both('請到預約頁向物主出示取件碼。', 'Open the booking page and show the pickup code to the owner.'),
       ].join('\n'),
       kind: needsPay ? 'pay' : 'code',
       bookingId: booking.id,
@@ -419,5 +504,169 @@ class _Bubble extends StatelessWidget {
       bookingId: booking.id,
     );
     await onChanged();
+  }
+}
+
+(double?, double)? _readOffer(String body) {
+  for (final line in body.split('\n')) {
+    if (!line.startsWith('#offer ')) continue;
+    double? rent;
+    var deposit = 0.0;
+    for (final part in line.substring(7).split(' ')) {
+      final bits = part.split('=');
+      if (bits.length != 2) continue;
+      if (bits[0] == 'rent') {
+        rent = bits[1].isEmpty ? null : double.tryParse(bits[1]);
+      } else if (bits[0] == 'deposit') {
+        deposit = double.tryParse(bits[1]) ?? 0;
+      }
+    }
+    return (rent, deposit);
+  }
+  return null;
+}
+
+Future<void> showPriceOfferDialog(
+  BuildContext context, {
+  required ShareStore store,
+  required AuthRepository auth,
+  required String sender,
+  required List<ShareItem> choices,
+  String? initialId,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) => _PriceOfferDialog(
+      store: store,
+      auth: auth,
+      sender: sender,
+      choices: choices,
+      initialId: initialId ?? choices.first.id,
+    ),
+  );
+}
+
+class _PriceOfferDialog extends StatefulWidget {
+  const _PriceOfferDialog({
+    required this.store,
+    required this.auth,
+    required this.sender,
+    required this.choices,
+    required this.initialId,
+  });
+
+  final ShareStore store;
+  final AuthRepository auth;
+  final String sender;
+  final List<ShareItem> choices;
+  final String initialId;
+
+  @override
+  State<_PriceOfferDialog> createState() => _PriceOfferDialogState();
+}
+
+class _PriceOfferDialogState extends State<_PriceOfferDialog> {
+  late String _itemId = widget.choices.any((item) => item.id == widget.initialId)
+      ? widget.initialId
+      : widget.choices.first.id;
+  final _price = TextEditingController();
+  final _deposit = TextEditingController();
+  String? _error;
+  var _busy = false;
+
+  @override
+  void dispose() {
+    _price.dispose();
+    _deposit.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    double? rent;
+    if (_price.text.trim().isNotEmpty) {
+      final parsed = double.tryParse(_price.text.trim());
+      if (parsed == null || parsed < 0) {
+        setState(() => _error = tr(context, '租金請填數字，或留空代表免費。', 'Enter a number for the rent, or leave it blank for free.'));
+        return;
+      }
+      rent = parsed == 0 ? null : parsed;
+    }
+    var deposit = 0.0;
+    if (_deposit.text.trim().isNotEmpty) {
+      final parsed = double.tryParse(_deposit.text.trim());
+      if (parsed == null || parsed < 0) {
+        setState(() => _error = tr(context, '按金請填數字，或留空代表不用按金。', 'Enter a number for the deposit, or leave it blank.'));
+        return;
+      }
+      deposit = parsed;
+    }
+    final item = widget.choices.firstWhere((entry) => entry.id == _itemId);
+    final rentText = rent == null ? '免費 / Free' : money(rent);
+    setState(() => _busy = true);
+    await widget.auth.sendMessage(
+      itemId: item.id,
+      sender: widget.sender,
+      body: [
+        both('提議新租金與按金', 'Proposed rent and deposit'),
+        '物品 / Item：${item.name}',
+        '租金 / Rent：$rentText',
+        '按金 / Deposit：${money(deposit)}',
+        '#offer rent=${rent ?? ''} deposit=$deposit',
+      ].join('\n'),
+      kind: 'offer',
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr(context, '提議新租金和按金', 'Propose rent and deposit')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              value: _itemId,
+              decoration: InputDecoration(labelText: tr(context, '借用物品', 'Item to borrow')),
+              items: [
+                for (final item in widget.choices)
+                  DropdownMenuItem(value: item.id, child: Text(item.name)),
+              ],
+              onChanged: _busy ? null : (value) {
+                if (value == null) return;
+                setState(() => _itemId = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _price,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: tr(context, '提議每日租金（可留空）', 'Proposed daily rent, optional')),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _deposit,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: tr(context, '提議按金（可留空）', 'Proposed deposit, optional')),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(color: Color(0xFF9A4632))),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: Text(tr(context, '取消', 'Cancel')),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _send,
+          child: Text(tr(context, '送出', 'Send')),
+        ),
+      ],
+    );
   }
 }

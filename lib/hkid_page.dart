@@ -7,6 +7,53 @@ import 'auth_repository.dart';
 import 'catalog_gateway.dart';
 import 'text.dart';
 
+Future<void> showHkidVerifyDialog(BuildContext context) {
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const _HkidVerifyDialog(),
+  );
+}
+
+class _HkidVerifyDialog extends StatefulWidget {
+  const _HkidVerifyDialog();
+
+  @override
+  State<_HkidVerifyDialog> createState() => _HkidVerifyDialogState();
+}
+
+class _HkidVerifyDialogState extends State<_HkidVerifyDialog> {
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(seconds: 3), () {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr(context, '正在核對身份證', 'Checking your HKID')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(
+            tr(
+              context,
+              '請稍候幾秒。核對完成後會當作已通過。',
+              'Please wait a few seconds. It will be treated as verified.',
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class HkidGatePage extends StatefulWidget {
   const HkidGatePage({
     super.key,
@@ -57,6 +104,8 @@ class _HkidGatePageState extends State<HkidGatePage> {
     });
     try {
       final user = await widget.auth.submitHkid(userId: widget.user.id, bytes: photo);
+      if (!mounted) return;
+      await showHkidVerifyDialog(context);
       if (!mounted) return;
       widget.onSubmitted(user);
     } on AuthFailure catch (error) {

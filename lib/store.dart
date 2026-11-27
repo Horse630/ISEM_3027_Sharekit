@@ -17,6 +17,7 @@ class ShareStore extends ChangeNotifier {
   final List<Booking> _bookings = [];
   int _sequence = 240;
   int? requestedTab;
+  bool focusMine = false;
   CatalogGateway? _gateway;
   Timer? _syncTimer;
   Future<void> _writes = Future<void>.value();
@@ -90,7 +91,9 @@ class ShareStore extends ChangeNotifier {
           booking.comment != next.comment ||
           booking.ownerReviewStars != next.ownerReviewStars ||
           booking.ownerReviewComment != next.ownerReviewComment ||
-          booking.ownerReviewAuthor != next.ownerReviewAuthor) {
+          booking.ownerReviewAuthor != next.ownerReviewAuthor ||
+          booking.returnCode != next.returnCode ||
+          booking.returnedAt != next.returnedAt) {
         return false;
       }
     }
@@ -157,6 +160,17 @@ class ShareStore extends ChangeNotifier {
   void openTab(int index) {
     requestedTab = index;
     notifyListeners();
+  }
+
+  void showMyListings() {
+    focusMine = true;
+    openTab(0);
+  }
+
+  bool takeFocusMine() {
+    if (!focusMine) return false;
+    focusMine = false;
+    return true;
   }
 
   List<ShareItem> search({
@@ -333,19 +347,28 @@ class ShareStore extends ChangeNotifier {
   }
 
   void markPickedUp(String bookingId) {
-    if (bookingById(bookingId).deposit == DepositStatus.pending) return;
+    final current = bookingById(bookingId);
+    if (current.deposit == DepositStatus.pending) return;
+    final returnCode = current.returnCode.isEmpty
+        ? ((_sequence * 53) % 9000 + 1000).toString()
+        : current.returnCode;
     _update(
       bookingId,
-      (booking) => booking.copyWith(stage: BookingStage.pickedUp),
+      (booking) => booking.copyWith(
+        stage: BookingStage.pickedUp,
+        returnCode: returnCode,
+      ),
     );
   }
 
-  void markReturned(String bookingId, String condition) {
+  void markReturned(String bookingId, String condition, {Uint8List? photo}) {
     _update(
       bookingId,
       (booking) => booking.copyWith(
         stage: BookingStage.returned,
         returnCondition: condition,
+        returnedAt: DateTime.now(),
+        returnPhoto: photo == null ? null : (shrinkPhotoBytes(photo) ?? photo),
       ),
     );
   }
@@ -403,6 +426,39 @@ class ShareStore extends ChangeNotifier {
       ),
     );
     return true;
+  }
+
+  void applyOffer({
+    required String itemId,
+    required double? dailyPrice,
+    required double depositAmount,
+  }) {
+    final index = _items.indexWhere((item) => item.id == itemId);
+    if (index == -1) return;
+    final item = _items[index];
+    _items[index] = ShareItem(
+      id: item.id,
+      name: item.name,
+      owner: item.owner,
+      category: item.category,
+      condition: item.condition,
+      distanceMeters: item.distanceMeters,
+      summary: item.summary,
+      rating: item.rating,
+      reviewCount: item.reviewCount,
+      handovers: item.handovers,
+      dailyPrice: dailyPrice,
+      depositAmount: depositAmount,
+      lengthCm: item.lengthCm,
+      widthCm: item.widthCm,
+      heightCm: item.heightCm,
+      photoBytes: item.photoBytes,
+      address: item.address,
+      district: item.district,
+      handover: item.handover,
+    );
+    notifyListeners();
+    _persist();
   }
 
   void addItem({

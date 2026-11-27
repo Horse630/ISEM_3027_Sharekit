@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'account_page.dart';
 import 'booking_pages.dart';
 import 'camera_capture.dart';
 import 'chat_center.dart';
@@ -138,6 +139,7 @@ class ItemDetailPage extends StatelessWidget {
               text: tr(context, '尺寸 ${sizeText(context, item)}', 'Size ${sizeText(context, item)}'),
             ),
           const SizedBox(height: 16),
+          ..._returnRecords(context, store, item.id),
           Text(
             tr(context, '評價', 'Reviews'),
             style: const TextStyle(fontWeight: FontWeight.w800),
@@ -162,7 +164,26 @@ class ItemDetailPage extends StatelessWidget {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!mine) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => showPriceOfferDialog(
+                      context,
+                      store: store,
+                      auth: AccountScope.of(context).auth,
+                      sender: user.label,
+                      choices: [item],
+                    ),
+                    child: Text(tr(context, '提議新租金和按金', 'Propose rent and deposit')),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Row(
             children: [
               if (!mine) ...[
                 Expanded(
@@ -191,10 +212,47 @@ class ItemDetailPage extends StatelessWidget {
               Expanded(child: _ownerAction(context, store, item)),
             ],
           ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+List<Widget> _returnRecords(BuildContext context, ShareStore store, String itemId) {
+  final records = store.bookings
+      .where((booking) => booking.itemId == itemId && booking.returnPhoto != null && booking.returnedAt != null)
+      .toList();
+  if (records.isEmpty) return const [];
+  return [
+    Text(
+      tr(context, '歸還記錄', 'Return records'),
+      style: const TextStyle(fontWeight: FontWeight.w800),
+    ),
+    const SizedBox(height: 8),
+    for (final record in records) ...[
+      GestureDetector(
+        onTap: () => showFullPhoto(context, record.returnPhoto!),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.memory(
+            record.returnPhoto!,
+            height: 180,
+            width: double.infinity,
+            fit: BoxFit.cover,
+          ),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(tr(
+        context,
+        '歸還時間 ${formatDateTime(record.returnedAt!)}',
+        'Returned ${formatDateTime(record.returnedAt!)}',
+      )),
+      const SizedBox(height: 14),
+    ],
+  ];
 }
 
 List<Widget> _reviewTiles(BuildContext context, ShareStore store, String itemId) {
@@ -658,9 +716,10 @@ class _SizeField extends StatelessWidget {
 }
 
 class ListItemPage extends StatefulWidget {
-  const ListItemPage({super.key, required this.ownerName});
+  const ListItemPage({super.key, required this.ownerName, required this.ui});
 
   final String ownerName;
+  final UiSettings ui;
 
   @override
   State<ListItemPage> createState() => _ListItemPageState();
@@ -679,23 +738,35 @@ class _ListItemPageState extends State<ListItemPage> {
   HkDistrict _district = HkDistrict.kowloonCity;
   String _condition = '良好';
   var _prefilled = false;
+  String? _autofill;
   Uint8List? _photo;
   String? _error;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_prefilled) return;
-    _prefilled = true;
-    final user = AccountScope.of(context).user;
-    if (_address.text.isEmpty && user.address.isNotEmpty) {
-      _address.text = user.address;
+    if (!_prefilled) {
+      _prefilled = true;
+      widget.ui.addListener(_fillAddress);
+      _district = AccountScope.of(context).user.district;
     }
-    _district = user.district;
+    _fillAddress();
+  }
+
+  void _fillAddress() {
+    if (!mounted) return;
+    final user = AccountScope.of(context).user;
+    final place = widget.ui.handoverPlace.trim();
+    final next = place.isNotEmpty ? place : user.address;
+    if (_address.text.isEmpty || _address.text == _autofill) {
+      _address.text = next;
+      _autofill = next;
+    }
   }
 
   @override
   void dispose() {
+    widget.ui.removeListener(_fillAddress);
     _name.dispose();
     _summary.dispose();
     _price.dispose();

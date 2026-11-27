@@ -111,7 +111,7 @@ class AuthRepository {
         p.join(await getDatabasesPath(), 'sharekit.db');
     _db = await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -231,6 +231,18 @@ class AuthRepository {
             await db.execute(
               'ALTER TABLE bookings ADD COLUMN deposit_amount REAL NOT NULL DEFAULT 0',
             );
+          }
+        }
+        if (oldVersion < 12) {
+          final bookingColumns = await db.rawQuery('PRAGMA table_info(bookings)');
+          if (!bookingColumns.any((row) => row['name'] == 'return_code')) {
+            await db.execute("ALTER TABLE bookings ADD COLUMN return_code TEXT NOT NULL DEFAULT ''");
+          }
+          if (!bookingColumns.any((row) => row['name'] == 'returned_at')) {
+            await db.execute('ALTER TABLE bookings ADD COLUMN returned_at TEXT');
+          }
+          if (!bookingColumns.any((row) => row['name'] == 'return_photo')) {
+            await db.execute('ALTER TABLE bookings ADD COLUMN return_photo BLOB');
           }
         }
         if (oldVersion < 11) {
@@ -429,6 +441,41 @@ class AuthRepository {
     return _userFrom(rows.first);
   }
 
+  Future<void> changePassword({
+    required int userId,
+    required String currentPassword,
+    required String nextPassword,
+  }) async {
+    if (currentPassword.isEmpty || nextPassword.length < 4) {
+      throw AuthFailure('請填現有密碼，新密碼至少 4 個字。');
+    }
+    if (_useRemote) {
+      await _loadRemoteUsers();
+      final row = _remoteById(userId);
+      if (row['password_hash'] != _hash(currentPassword)) {
+        throw AuthFailure('現有密碼不對。');
+      }
+      row['password_hash'] = _hash(nextPassword);
+      await _api.replace('users', row['_id'] as String, row);
+      return;
+    }
+    final rows = await _database.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (rows.isEmpty || rows.first['password_hash'] != _hash(currentPassword)) {
+      throw AuthFailure('現有密碼不對。');
+    }
+    await _database.update(
+      'users',
+      {'password_hash': _hash(nextPassword)},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
+
   Future<AppUser> submitHkid({
     required int userId,
     required Uint8List bytes,
@@ -549,6 +596,9 @@ class AuthRepository {
         owner_review_author TEXT,
         pay_method TEXT NOT NULL DEFAULT 'online',
         return_condition TEXT,
+        return_code TEXT NOT NULL DEFAULT '',
+        returned_at TEXT,
+        return_photo BLOB,
         stars INTEGER,
         comment TEXT,
         issue TEXT

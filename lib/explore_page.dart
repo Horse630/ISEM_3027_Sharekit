@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'item_pages.dart';
 import 'main.dart';
 import 'models.dart';
+import 'store.dart';
 import 'text.dart';
 import 'widgets.dart';
 
@@ -16,13 +17,32 @@ class ExplorePage extends StatefulWidget {
 class _ExplorePageState extends State<ExplorePage> {
   final _query = TextEditingController();
   ItemCategory? _category;
-  HkDistrict? _district;
   ItemSort _sort = ItemSort.nearest;
   bool _freeOnly = false;
   bool _mineOnly = false;
+  ShareStore? _store;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final store = ShareKitScope.of(context);
+    if (!identical(_store, store)) {
+      _store?.removeListener(_onStore);
+      _store = store;
+      store.addListener(_onStore);
+    }
+    _onStore();
+  }
+
+  void _onStore() {
+    final store = _store;
+    if (store == null || !store.takeFocusMine() || _mineOnly) return;
+    setState(() => _mineOnly = true);
+  }
 
   @override
   void dispose() {
+    _store?.removeListener(_onStore);
     _query.dispose();
     super.dispose();
   }
@@ -35,13 +55,11 @@ class _ExplorePageState extends State<ExplorePage> {
       query: _query.text,
       category: _category,
       freeOnly: _freeOnly,
-      district: _district,
+      district: null,
       owner: _mineOnly ? user.label : null,
       sort: _sort,
     );
-    final place = _district == null
-        ? tr(context, '香港浸會大學', 'HKBU Campus')
-        : districtLabel(context, _district!);
+    final place = tr(context, '香港浸會大學', 'HKBU Campus');
 
     return SafeArea(
       child: ListView(
@@ -80,67 +98,72 @@ class _ExplorePageState extends State<ExplorePage> {
             ),
           ),
           const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FilterChip(
-                  label: tr(context, '全部', 'All'),
-                  selected: _category == null && !_freeOnly,
-                  onTap: () => setState(() {
-                    _category = null;
-                    _freeOnly = false;
-                  }),
+                Text(
+                  tr(context, '分類', 'Category'),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
-                for (final category in ItemCategory.values)
-                  _FilterChip(
-                    label: categoryLabel(context, category),
-                    selected: _category == category,
-                    onTap: () => setState(() => _category = category),
-                  ),
-                _FilterChip(
-                  label: tr(context, '只看免費', 'Free only'),
-                  selected: _freeOnly,
-                  onTap: () => setState(() => _freeOnly = !_freeOnly),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _FilterChip(
+                      label: tr(context, '全部', 'All'),
+                      selected: _category == null && !_freeOnly,
+                      onTap: () => setState(() {
+                        _category = null;
+                        _freeOnly = false;
+                      }),
+                    ),
+                    for (final category in ItemCategory.values)
+                      _FilterChip(
+                        label: categoryLabel(context, category),
+                        selected: _category == category,
+                        onTap: () => setState(() => _category = category),
+                      ),
+                  ],
                 ),
-                _FilterChip(
-                  label: tr(context, '我的物品', 'My items'),
-                  selected: _mineOnly,
-                  onTap: () => setState(() => _mineOnly = !_mineOnly),
+                const SizedBox(height: 14),
+                Text(
+                  tr(context, '篩選與排序', 'Filter and sort'),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _FilterChip(
+                      label: tr(context, '只看免費', 'Free only'),
+                      selected: _freeOnly,
+                      onTap: () => setState(() => _freeOnly = !_freeOnly),
+                    ),
+                    _FilterChip(
+                      label: tr(context, '我的物品', 'My items'),
+                      selected: _mineOnly,
+                      onTap: () => setState(() => _mineOnly = !_mineOnly),
+                    ),
+                    for (final sort in ItemSort.values)
+                      _FilterChip(
+                        label: sortLabel(context, sort),
+                        selected: _sort == sort,
+                        onTap: () => setState(() => _sort = sort),
+                      ),
+                  ],
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await showHkDistrictSheet(
-                    context,
-                    includeAll: true,
-                    selected: _district,
-                  );
-                  if (!mounted || picked == null) return;
-                  setState(() => _district = picked.district);
-                },
-                icon: const Icon(Icons.map_outlined),
-                label: Text(
-                  _district == null
-                      ? tr(context, '十八區', '18 districts')
-                      : districtLabel(context, _district!),
-                ),
-              ),
-              for (final sort in ItemSort.values)
-                ChoiceChip(
-                  label: Text(sortLabel(context, sort)),
-                  selected: _sort == sort,
-                  onSelected: (_) => setState(() => _sort = sort),
-                ),
-            ],
           ),
           const SizedBox(height: 16),
           Text(
@@ -238,13 +261,12 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) => onTap(),
-      ),
+    return ChoiceChip(
+      label: Text(label, softWrap: false),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      selected: selected,
+      onSelected: (_) => onTap(),
     );
   }
 }

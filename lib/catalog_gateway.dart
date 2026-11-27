@@ -293,6 +293,9 @@ Map<String, Object?> bookingToRow(Booking booking) {
     'owner_review_comment': booking.ownerReviewComment,
     'owner_review_author': booking.ownerReviewAuthor,
     'return_condition': booking.returnCondition,
+    'return_code': booking.returnCode,
+    'returned_at': booking.returnedAt?.toIso8601String(),
+    'return_photo': booking.returnPhoto,
     'stars': booking.stars,
     'comment': booking.comment,
     'issue': booking.issue,
@@ -317,6 +320,9 @@ Booking bookingFromRow(Map<String, Object?> row) {
     ownerReviewComment: row['owner_review_comment'] as String?,
     ownerReviewAuthor: row['owner_review_author'] as String?,
     returnCondition: row['return_condition'] as String?,
+    returnCode: (row['return_code'] as String?) ?? '',
+    returnedAt: DateTime.tryParse((row['returned_at'] as String?) ?? ''),
+    returnPhoto: _bytes(row['return_photo']),
     stars: row['stars'] as int?,
     comment: row['comment'] as String?,
     issue: row['issue'] as String?,
@@ -352,7 +358,12 @@ Map<String, Object?> _itemJson(ShareItem item) {
   return row;
 }
 
-Map<String, Object?> _bookingJson(Booking booking) => bookingToRow(booking);
+Map<String, Object?> _bookingJson(Booking booking) {
+  final row = bookingToRow(booking);
+  final photo = booking.returnPhoto;
+  row['return_photo'] = photo == null ? null : base64Encode(photo);
+  return row;
+}
 
 Map<String, Object?> _bookingRow(Map<String, Object?> json) => json;
 

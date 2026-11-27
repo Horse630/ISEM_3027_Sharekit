@@ -103,6 +103,7 @@ void main() {
 
   testWidgets('可以在物品頁跟物主聊天', (tester) async {
     await openApp(tester);
+    await tester.ensureVisible(find.text('充電電鑽套裝'));
     await tester.tap(find.text('充電電鑽套裝'));
     await tester.pumpAndSettle();
     expect(find.textContaining('香港浸會大學校園'), findsOneWidget);
@@ -140,19 +141,13 @@ void main() {
     expect(find.text('其他'), findsWidgets);
   });
 
-  testWidgets('可以按香港十八區篩選，並在設定改名稱', (tester) async {
+  testWidgets('可以在設定改名稱', (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await openApp(tester);
-    await tester.tap(find.text('十八區'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('沙田區'));
-    await tester.pumpAndSettle();
-    expect(find.text('雙人露營套裝'), findsOneWidget);
-    expect(find.text('充電電鑽套裝'), findsNothing);
-
+    expect(find.text('十八區'), findsNothing);
     await tester.tap(find.text('設定'));
     await tester.pumpAndSettle();
     expect(find.text('顯示名稱'), findsOneWidget);
@@ -165,7 +160,12 @@ void main() {
   });
 
   testWidgets('可以完成預約、取件、歸還和評價', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final store = await openApp(tester);
+    await tester.ensureVisible(find.text('充電電鑽套裝'));
     await tester.tap(find.text('充電電鑽套裝'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('預約這件物品'));

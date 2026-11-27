@@ -1,4 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'camera_capture.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import 'main.dart';
 import 'models.dart';
@@ -124,6 +129,8 @@ class BookingDetailPage extends StatelessWidget {
       );
     }
     final quote = quoteFor(item, booking.start, booking.end);
+    final user = AccountScope.of(context).user;
+    final isOwner = item.owner == user.label || item.owner == user.name;
     return Scaffold(
       appBar: AppBar(title: Text(booking.id)),
       body: ListView(
@@ -181,9 +188,34 @@ class BookingDetailPage extends StatelessWidget {
               icon: Icons.report_outlined,
               text: tr(context, '問題回報：${booking.issue}', 'Issue: ${booking.issue}'),
             ),
-          if (store.codeReady(booking)) ...[
+          if (booking.stage == BookingStage.reserved && store.codeReady(booking)) ...[
             const SizedBox(height: 8),
-            _CodeBox(code: booking.pickupCode),
+            if (isOwner)
+              _OwnerCodeCheck(
+                code: booking.pickupCode,
+                onMatched: () => _ActionBar.handedOver(context, store, booking.id),
+              )
+            else
+              _CodeBox(code: booking.pickupCode),
+          ],
+          if (!isOwner &&
+              booking.stage == BookingStage.pickedUp &&
+              booking.returnCode.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _CodeBox(
+              code: booking.returnCode,
+              titleZh: '歸還碼',
+              titleEn: 'Return code',
+              hintZh: '歸還時把這組碼或 QR code 給物主核對。',
+              hintEn: 'Show this code or QR code when you return the item.',
+            ),
+          ],
+          if (isOwner && booking.stage == BookingStage.pickedUp) ...[
+            const SizedBox(height: 8),
+            _OwnerReturnCheck(
+              code: booking.returnCode,
+              onMatched: (photo) => _ActionBar.returned(context, store, booking.id, photo),
+            ),
           ],
           if (booking.returnCondition != null)
             InfoLine(
@@ -242,9 +274,19 @@ class BookingDetailPage extends StatelessWidget {
 }
 
 class _CodeBox extends StatelessWidget {
-  const _CodeBox({required this.code});
+  const _CodeBox({
+    required this.code,
+    this.titleZh = '取件碼',
+    this.titleEn = 'Pickup code',
+    this.hintZh = '把這組碼或 QR code 給物主核對。',
+    this.hintEn = 'Show this code or QR code to the owner.',
+  });
 
   final String code;
+  final String titleZh;
+  final String titleEn;
+  final String hintZh;
+  final String hintEn;
 
   @override
   Widget build(BuildContext context) {
@@ -257,8 +299,14 @@ class _CodeBox extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(tr(context, '取件碼', 'Pickup code'), style: const TextStyle(color: Color(0xFF5E6A64))),
-          const SizedBox(height: 4),
+          Text(tr(context, titleZh, titleEn), style: const TextStyle(color: Color(0xFF5E6A64))),
+          const SizedBox(height: 12),
+          QrImageView(
+            data: code,
+            size: 180,
+            backgroundColor: Colors.white,
+          ),
+          const SizedBox(height: 8),
           Text(
             code,
             style: const TextStyle(
@@ -269,10 +317,252 @@ class _CodeBox extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            tr(context, '交給物主核對，然後在下面確認已取件。', 'Show this to the owner, then confirm pickup below.'),
+            tr(context, hintZh, hintEn),
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _OwnerCodeCheck extends StatefulWidget {
+  const _OwnerCodeCheck({required this.code, required this.onMatched});
+
+  final String code;
+  final VoidCallback onMatched;
+
+  @override
+  State<_OwnerCodeCheck> createState() => _OwnerCodeCheckState();
+}
+
+class _OwnerCodeCheckState extends State<_OwnerCodeCheck> {
+  final _entered = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _entered.dispose();
+    super.dispose();
+  }
+
+  void _check(String raw) {
+    if (raw.trim() == widget.code) {
+      widget.onMatched();
+      return;
+    }
+    setState(() => _error = tr(context, '取件碼不對。', 'That pickup code is wrong.'));
+  }
+
+  Future<void> _scan() async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const PickupScanPage()),
+    );
+    if (!mounted || scanned == null) return;
+    _entered.text = scanned.trim();
+    _check(scanned);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            tr(context, '核對取件碼', 'Check the pickup code'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(tr(
+            context,
+            '請向借用者索取取件碼。可以手動輸入，或掃描對方的 QR code。',
+            'Ask the borrower for the pickup code. Type it, or scan their QR code.',
+          )),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _entered,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: tr(context, '取件碼', 'Pickup code'),
+            ),
+            onSubmitted: _check,
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: Color(0xFF9A4632))),
+          ],
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () => _check(_entered.text),
+            child: Text(tr(context, '核對並確認借出', 'Check and confirm handover')),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _scan,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text(tr(context, '掃描 QR code', 'Scan QR code')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OwnerReturnCheck extends StatefulWidget {
+  const _OwnerReturnCheck({required this.code, required this.onMatched});
+
+  final String code;
+  final ValueChanged<Uint8List> onMatched;
+
+  @override
+  State<_OwnerReturnCheck> createState() => _OwnerReturnCheckState();
+}
+
+class _OwnerReturnCheckState extends State<_OwnerReturnCheck> {
+  final _entered = TextEditingController();
+  Uint8List? _photo;
+  String? _error;
+
+  @override
+  void dispose() {
+    _entered.dispose();
+    super.dispose();
+  }
+
+  void _check(String raw) {
+    final photo = _photo;
+    if (photo == null) {
+      setState(() => _error = tr(context, '請先拍攝歸還時的物品現況。', 'Take a photo of the item being returned.'));
+      return;
+    }
+    if (widget.code.isEmpty) {
+      setState(() => _error = tr(context, '還沒有歸還碼。', 'There is no return code yet.'));
+      return;
+    }
+    if (raw.trim() != widget.code) {
+      setState(() => _error = tr(context, '歸還碼不對。', 'That return code is wrong.'));
+      return;
+    }
+    widget.onMatched(photo);
+  }
+
+  Future<void> _scan() async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const PickupScanPage()),
+    );
+    if (!mounted || scanned == null) return;
+    _entered.text = scanned.trim();
+    _check(scanned);
+  }
+
+  Future<void> _shoot() async {
+    final bytes = await Navigator.of(context).push<Uint8List>(
+      MaterialPageRoute(
+        builder: (_) => CameraCapturePage(title: tr(context, '拍攝歸還現況', 'Photograph the return')),
+      ),
+    );
+    if (!mounted || bytes == null) return;
+    setState(() {
+      _photo = bytes;
+      _error = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            tr(context, '核對歸還', 'Check the return'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(tr(
+            context,
+            '請輸入或掃描借用者的歸還碼，並拍攝物品現況。沒有照片不能確認歸還。',
+            'Enter or scan the borrower’s return code, and photograph the item. A photo is required.',
+          )),
+          const SizedBox(height: 12),
+          if (_photo != null)
+            GestureDetector(
+              onTap: () => showFullPhoto(context, _photo!),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(_photo!, height: 140, width: double.infinity, fit: BoxFit.cover),
+              ),
+            ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _shoot,
+            icon: const Icon(Icons.photo_camera_outlined),
+            label: Text(_photo == null ? tr(context, '拍攝歸還現況', 'Photograph the return') : tr(context, '重新拍攝', 'Retake')),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _entered,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: tr(context, '歸還碼', 'Return code')),
+            onSubmitted: _check,
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: Color(0xFF9A4632))),
+          ],
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () => _check(_entered.text),
+            child: Text(tr(context, '核對並確認歸還', 'Check and confirm return')),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _scan,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text(tr(context, '掃描 QR code', 'Scan QR code')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PickupScanPage extends StatefulWidget {
+  const PickupScanPage({super.key});
+
+  @override
+  State<PickupScanPage> createState() => _PickupScanPageState();
+}
+
+class _PickupScanPageState extends State<PickupScanPage> {
+  var _done = false;
+
+  void _found(String? raw) {
+    final code = raw?.trim() ?? '';
+    if (_done || code.isEmpty) return;
+    _done = true;
+    Navigator.of(context).pop(code);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(tr(context, '掃描取件碼', 'Scan pickup code'))),
+      body: MobileScanner(
+        onDetect: (capture) => _found(capture.barcodes.firstOrNull?.rawValue),
       ),
     );
   }
@@ -317,16 +607,6 @@ class _ActionBar extends StatelessWidget {
       });
     }
     final (zh, en, action) = switch (booking.stage) {
-      BookingStage.reserved when store.codeReady(booking) => (
-        '確認已借出',
-        'Confirm handed over',
-        () => _handedOver(context, store, bookingId),
-      ),
-      BookingStage.pickedUp => (
-        '確認歸還',
-        'Confirm return',
-        () => _returned(context, store, bookingId),
-      ),
       BookingStage.returned || BookingStage.reviewed when canReviewBorrower => (
         '評價借用者',
         'Review borrower',
@@ -356,24 +636,26 @@ class _ActionBar extends StatelessWidget {
     );
   }
 
-  Future<void> _handedOver(BuildContext context, ShareStore store, String bookingId) async {
+  static Future<void> handedOver(BuildContext context, ShareStore store, String bookingId) async {
     store.markPickedUp(bookingId);
     final booking = store.bookingById(bookingId);
     final owner = store.findItem(booking.itemId)?.owner ?? '';
     await AccountScope.of(context).auth.sendMessage(
       itemId: booking.itemId,
       sender: owner,
-      body: [
-        both('物主已確認交件。', 'The owner confirmed the handover.'),
-        '交接碼 / Exchange code：${booking.pickupCode}',
-      ].join('\n'),
+      body: both('物主已核對取件碼並確認交件。', 'The owner checked the pickup code and confirmed the handover.'),
       kind: 'rented',
       bookingId: booking.id,
     );
   }
 
-  Future<void> _returned(BuildContext context, ShareStore store, String bookingId) async {
-    store.markReturned(bookingId, '完好');
+  static Future<void> returned(
+    BuildContext context,
+    ShareStore store,
+    String bookingId,
+    Uint8List photo,
+  ) async {
+    store.markReturned(bookingId, '完好', photo: photo);
     final booking = store.bookingById(bookingId);
     final owner = store.findItem(booking.itemId)?.owner ?? '';
     await AccountScope.of(context).auth.sendMessage(
@@ -578,7 +860,7 @@ class DepositPage extends StatelessWidget {
                       '按金 ${money(latest.depositAmount)} 已付，由平台暫存。',
                       'Deposit ${money(latest.depositAmount)} is paid and held by the platform.',
                     ),
-                  '交接碼 / Exchange code：${latest.pickupCode}',
+                  both('請到預約頁向物主出示取件碼。', 'Open the booking page and show the pickup code to the owner.'),
                 ].join('\n'),
                 kind: 'code',
                 bookingId: latest.id,

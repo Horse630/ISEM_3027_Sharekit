@@ -343,6 +343,9 @@ class Booking {
     this.ownerReviewComment,
     this.ownerReviewAuthor,
     this.returnCondition,
+    this.returnCode = '',
+    this.returnedAt,
+    this.returnPhoto,
     this.stars,
     this.comment,
     this.issue,
@@ -364,6 +367,9 @@ class Booking {
   final String? ownerReviewComment;
   final String? ownerReviewAuthor;
   final String? returnCondition;
+  final String returnCode;
+  final DateTime? returnedAt;
+  final Uint8List? returnPhoto;
   final int? stars;
   final String? comment;
   final String? issue;
@@ -375,6 +381,9 @@ class Booking {
     DepositStatus? deposit,
     PayMethod? payMethod,
     String? returnCondition,
+    String? returnCode,
+    DateTime? returnedAt,
+    Uint8List? returnPhoto,
     int? stars,
     String? comment,
     String? issue,
@@ -401,6 +410,9 @@ class Booking {
       ownerReviewComment: ownerReviewComment ?? this.ownerReviewComment,
       ownerReviewAuthor: ownerReviewAuthor ?? this.ownerReviewAuthor,
       returnCondition: returnCondition ?? this.returnCondition,
+      returnCode: returnCode ?? this.returnCode,
+      returnedAt: returnedAt ?? this.returnedAt,
+      returnPhoto: returnPhoto ?? this.returnPhoto,
       stars: stars ?? this.stars,
       comment: comment ?? this.comment,
       issue: issue ?? this.issue,
@@ -426,6 +438,13 @@ class PriceQuote {
 
 DateTime dateOnly(DateTime value) =>
     DateTime(value.year, value.month, value.day);
+
+String formatDateTime(DateTime value) {
+  final local = value.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '${formatDate(local)} $hour:$minute';
+}
 
 String formatDate(DateTime value) {
   final day = dateOnly(value);
