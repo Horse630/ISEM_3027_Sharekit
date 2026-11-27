@@ -15,7 +15,14 @@ import 'store.dart';
 import 'text.dart';
 import 'widgets.dart';
 
-const supportServiceName = 'Customary service';
+const supportServiceName = 'Customer service';
+const legacySupportServiceName = 'Customary service';
+
+bool isSupportStaff(String sender) =>
+    sender == supportServiceName || sender == legacySupportServiceName;
+
+String supportSenderLabel(String sender) =>
+    isSupportStaff(sender) ? supportServiceName : sender;
 
 String supportItemId(String login) => 'support-$login';
 
@@ -70,11 +77,11 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _load() async {
     final messages = await widget.auth.messagesFor(widget.itemId);
-    if (_support && !messages.any((message) => message.sender == supportServiceName)) {
+    if (_support && !messages.any((message) => isSupportStaff(message.sender))) {
       await widget.auth.sendMessage(
         itemId: widget.itemId,
         sender: supportServiceName,
-        body: 'Hello, this is Customary service. Please tell us your problem: what you were trying to do, and what went wrong. We will read your message and help.',
+        body: 'Hello, this is Customer service. Please tell us your problem: what you were trying to do, and what went wrong. We will read your message and help.',
       );
       return _load();
     }
@@ -123,7 +130,7 @@ class _ChatPageState extends State<ChatPage> {
       await widget.auth.sendMessage(
         itemId: widget.itemId,
         sender: supportServiceName,
-        body: 'We have received your message. Someone from Customary service will contact you soon.',
+        body: 'We have received your message. Someone from Customer service will contact you soon.',
       );
     }
     await _load();
@@ -363,7 +370,11 @@ class _Bubble extends StatelessWidget {
                     ),
                   if (message.body.isNotEmpty)
                     Text(
-                      message.body.split('\n').where((line) => !line.startsWith('#offer ')).join('\n'),
+                      message.body
+                          .split('\n')
+                          .where((line) => !line.startsWith('#offer '))
+                          .join('\n')
+                          .replaceAll(legacySupportServiceName, supportServiceName),
                       style: TextStyle(color: mine ? Colors.white : const Color(0xFF1B2A24)),
                     ),
                 ],

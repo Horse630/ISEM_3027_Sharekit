@@ -12,7 +12,8 @@ String _preview(BuildContext context, ChatMessage message) {
       .split('\n')
       .where((line) => !line.startsWith('#offer '))
       .join(' ');
-  return text.isEmpty ? tr(context, '相片', 'Photo') : text;
+  final shown = text.replaceAll(legacySupportServiceName, supportServiceName);
+  return shown.isEmpty ? tr(context, '相片', 'Photo') : shown;
 }
 
 class ChatsPage extends StatelessWidget {
@@ -236,7 +237,7 @@ class _ThreadTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${thread.latest.sender}：${_preview(context, thread.latest)}',
+                      '${supportSenderLabel(thread.latest.sender)}：${_preview(context, thread.latest)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Color(0xFF5E6A64)),
