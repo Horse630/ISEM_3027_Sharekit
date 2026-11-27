@@ -11,7 +11,7 @@ class ShareStore extends ChangeNotifier {
     _items = List<ShareItem>.of(seedItems());
   }
 
-  static const community = '九龍塘示範屋苑';
+  static const community = '香港浸會大學';
 
   late List<ShareItem> _items;
   final List<Booking> _bookings = [];
@@ -86,7 +86,8 @@ class ShareStore extends ChangeNotifier {
           booking.deposit != next.deposit ||
           booking.borrower != next.borrower ||
           booking.borrowerAccount != next.borrowerAccount ||
-          booking.stars != next.stars || booking.comment != next.comment ||
+          booking.stars != next.stars ||
+          booking.comment != next.comment ||
           booking.ownerReviewStars != next.ownerReviewStars ||
           booking.ownerReviewComment != next.ownerReviewComment ||
           booking.ownerReviewAuthor != next.ownerReviewAuthor) {
@@ -128,13 +129,16 @@ class ShareStore extends ChangeNotifier {
 
   bool isBorrower(Booking booking, String label, String login) =>
       booking.borrowerAccount.isNotEmpty
-          ? booking.borrowerAccount == login
-          : booking.borrower.isNotEmpty &&
-              (booking.borrower == label || booking.borrower == login);
+      ? booking.borrowerAccount == login
+      : booking.borrower.isNotEmpty &&
+            (booking.borrower == label || booking.borrower == login);
 
   List<Booking> reviewsForBorrower(String label, String login) => bookings
-      .where((booking) => isBorrower(booking, label, login) &&
-          (booking.ownerReviewComment ?? '').trim().isNotEmpty)
+      .where(
+        (booking) =>
+            isBorrower(booking, label, login) &&
+            (booking.ownerReviewComment ?? '').trim().isNotEmpty,
+      )
       .toList();
 
   DateTime nextOpenDay(String itemId) {
@@ -207,7 +211,8 @@ class ShareStore extends ChangeNotifier {
     for (var index = 0; index < _bookings.length; index++) {
       final booking = _bookings[index];
       if (booking.borrower == from &&
-          (booking.borrowerAccount.isEmpty || booking.borrowerAccount == login)) {
+          (booking.borrowerAccount.isEmpty ||
+              booking.borrowerAccount == login)) {
         _bookings[index] = booking.copyWith(borrower: next);
         changed = true;
       }
@@ -241,7 +246,8 @@ class ShareStore extends ChangeNotifier {
     if (item == null) return null;
     if (borrower == item.owner) return null;
     _sequence += 1;
-    final needsPay = payMethod == PayMethod.online && !item.isFree;
+    final holdsDeposit = item.depositAmount > 0;
+    final rentOnline = payMethod == PayMethod.online && !item.isFree;
     final booking = Booking(
       id: 'SK-$_sequence',
       itemId: itemId,
@@ -251,7 +257,10 @@ class ShareStore extends ChangeNotifier {
       pickupCode: (_sequence * 37 % 9000 + 1000).toString(),
       note: note.trim(),
       payMethod: payMethod,
-      deposit: needsPay ? DepositStatus.pending : DepositStatus.none,
+      deposit: holdsDeposit || rentOnline
+          ? DepositStatus.pending
+          : DepositStatus.none,
+      depositAmount: item.depositAmount,
       borrower: borrower,
       borrowerAccount: borrowerAccount,
     );
@@ -264,7 +273,10 @@ class ShareStore extends ChangeNotifier {
   void acceptBooking(String bookingId) {
     final booking = bookingById(bookingId);
     if (booking.stage != BookingStage.requested) return;
-    _update(bookingId, (current) => current.copyWith(stage: BookingStage.reserved));
+    _update(
+      bookingId,
+      (current) => current.copyWith(stage: BookingStage.reserved),
+    );
   }
 
   void rejectBooking(String bookingId, String reason) {
@@ -272,19 +284,20 @@ class ShareStore extends ChangeNotifier {
     if (booking.stage != BookingStage.requested) return;
     _update(
       bookingId,
-      (current) => current.copyWith(
-        stage: BookingStage.rejected,
-        issue: reason.trim(),
-      ),
+      (current) =>
+          current.copyWith(stage: BookingStage.rejected, issue: reason.trim()),
     );
   }
 
   bool needsOnlinePayment(Booking booking) {
+    if (booking.deposit != DepositStatus.pending ||
+        booking.stage != BookingStage.reserved) {
+      return false;
+    }
+    if (booking.depositAmount > 0) return true;
     final item = findItem(booking.itemId);
     if (item == null || item.isFree) return false;
-    return booking.payMethod == PayMethod.online &&
-        booking.deposit == DepositStatus.pending &&
-        booking.stage == BookingStage.reserved;
+    return booking.payMethod == PayMethod.online;
   }
 
   bool codeReady(Booking booking) {
@@ -298,7 +311,10 @@ class ShareStore extends ChangeNotifier {
   void payDeposit(String bookingId) {
     final booking = bookingById(bookingId);
     if (booking.deposit != DepositStatus.pending) return;
-    _update(bookingId, (current) => current.copyWith(deposit: DepositStatus.paid));
+    _update(
+      bookingId,
+      (current) => current.copyWith(deposit: DepositStatus.paid),
+    );
   }
 
   void refundDeposit(String bookingId) {
@@ -334,30 +350,43 @@ class ShareStore extends ChangeNotifier {
     );
   }
 
-  bool saveReview(String bookingId, int stars, String comment, {
+  bool saveReview(
+    String bookingId,
+    int stars,
+    String comment, {
     required String reviewerLabel,
     required String reviewerLogin,
   }) {
     final booking = bookingById(bookingId);
     final itemIndex = _items.indexWhere((item) => item.id == booking.itemId);
     final text = comment.trim();
-    if (itemIndex == -1 || stars < 1 || stars > 5 || text.isEmpty ||
-        (booking.stage != BookingStage.returned && booking.stage != BookingStage.reviewed)) {
+    if (itemIndex == -1 ||
+        stars < 1 ||
+        stars > 5 ||
+        text.isEmpty ||
+        (booking.stage != BookingStage.returned &&
+            booking.stage != BookingStage.reviewed)) {
       return false;
     }
     final item = _items[itemIndex];
     final isOwner = item.owner == reviewerLabel || item.owner == reviewerLogin;
     final borrower = isBorrower(booking, reviewerLabel, reviewerLogin);
     if (isOwner && !borrower) {
-      if (booking.borrower.isEmpty || (booking.ownerReviewComment ?? '').trim().isNotEmpty) return false;
-      _update(bookingId, (current) => current.copyWith(
-        ownerReviewStars: stars,
-        ownerReviewComment: text,
-        ownerReviewAuthor: reviewerLabel,
-      ));
+      if (booking.borrower.isEmpty ||
+          (booking.ownerReviewComment ?? '').trim().isNotEmpty)
+        return false;
+      _update(
+        bookingId,
+        (current) => current.copyWith(
+          ownerReviewStars: stars,
+          ownerReviewComment: text,
+          ownerReviewAuthor: reviewerLabel,
+        ),
+      );
       return true;
     }
-    if (!borrower || isOwner || (booking.comment ?? '').trim().isNotEmpty) return false;
+    if (!borrower || isOwner || (booking.comment ?? '').trim().isNotEmpty)
+      return false;
     final nextCount = item.reviewCount + 1;
     final nextRating = ((item.rating * item.reviewCount) + stars) / nextCount;
     _items[itemIndex] = item.copyWith(
@@ -365,11 +394,14 @@ class ShareStore extends ChangeNotifier {
       reviewCount: nextCount,
       handovers: item.handovers + 1,
     );
-    _update(bookingId, (current) => current.copyWith(
-      stage: BookingStage.reviewed,
-      stars: stars,
-      comment: text,
-    ));
+    _update(
+      bookingId,
+      (current) => current.copyWith(
+        stage: BookingStage.reviewed,
+        stars: stars,
+        comment: text,
+      ),
+    );
     return true;
   }
 
@@ -380,6 +412,10 @@ class ShareStore extends ChangeNotifier {
     required String condition,
     required String summary,
     required double? dailyPrice,
+    required double depositAmount,
+    double? lengthCm,
+    double? widthCm,
+    double? heightCm,
     required Uint8List photoBytes,
     required String address,
     required HkDistrict district,
@@ -400,6 +436,10 @@ class ShareStore extends ChangeNotifier {
         reviewCount: 0,
         handovers: 0,
         dailyPrice: dailyPrice,
+        depositAmount: depositAmount,
+        lengthCm: lengthCm,
+        widthCm: widthCm,
+        heightCm: heightCm,
         photoBytes: photoBytes,
         address: address.trim(),
         district: district,
@@ -432,117 +472,5 @@ class ShareStore extends ChangeNotifier {
   }
 }
 
-List<ShareItem> seedItems() {
-  return const [
-    ShareItem(
-      id: 'drill',
-      name: '充電電鑽套裝',
-      owner: '陳先生',
-      category: ItemCategory.tool,
-      condition: '良好',
-      distanceMeters: 180,
-      dailyPrice: 40,
-      summary: '附兩枚電池、常用鑽咀和充電座。適合裝窗簾桿、層架，用完即還。',
-      rating: 4.8,
-      reviewCount: 16,
-      handovers: 21,
-      district: HkDistrict.kowloonCity,
-    ),
-    ShareItem(
-      id: 'cleaner',
-      name: '地毯清潔機',
-      owner: '林小姐',
-      category: ItemCategory.home,
-      condition: '良好',
-      distanceMeters: 420,
-      dailyPrice: 60,
-      summary: '適合沙發和地毯深層清潔。機身連短吸管，清潔劑需自備。',
-      rating: 4.6,
-      reviewCount: 9,
-      handovers: 11,
-      district: HkDistrict.kowloonCity,
-    ),
-    ShareItem(
-      id: 'camp',
-      name: '雙人露營套裝',
-      owner: '黃同學',
-      category: ItemCategory.outdoor,
-      condition: '有使用痕跡',
-      distanceMeters: 650,
-      dailyPrice: 80,
-      summary: '帳幕、防潮墊和兩支頭燈。帳底有正常摺痕，沒有破洞。',
-      rating: 4.7,
-      reviewCount: 7,
-      handovers: 8,
-      district: HkDistrict.shaTin,
-    ),
-    ShareItem(
-      id: 'tables',
-      name: '摺枱連椅一組',
-      owner: '業主會',
-      category: ItemCategory.event,
-      condition: '良好',
-      distanceMeters: 260,
-      summary: '一張摺枱加四張摺椅，給樓層聚會或學會活動免費借用。',
-      rating: 4.9,
-      reviewCount: 22,
-      handovers: 30,
-      district: HkDistrict.kowloonCity,
-    ),
-    ShareItem(
-      id: 'projector',
-      name: '便攜投影機',
-      owner: '周先生',
-      category: ItemCategory.event,
-      condition: '良好',
-      distanceMeters: 900,
-      dailyPrice: 50,
-      summary: '支援 HDMI。適合電影夜和小組匯報，遙控器放在同袋。',
-      rating: 4.5,
-      reviewCount: 6,
-      handovers: 6,
-      district: HkDistrict.yauTsimMong,
-    ),
-    ShareItem(
-      id: 'washer',
-      name: '高壓清洗機',
-      owner: '張太太',
-      category: ItemCategory.home,
-      condition: '良好',
-      distanceMeters: 1100,
-      dailyPrice: 45,
-      summary: '清洗冷氣機濾網外的露台地板。水管接頭已附，用後請抹乾。',
-      rating: 4.4,
-      reviewCount: 5,
-      handovers: 5,
-      district: HkDistrict.kwunTong,
-    ),
-    ShareItem(
-      id: 'cookset',
-      name: '登山炊具組',
-      owner: '李同學',
-      category: ItemCategory.outdoor,
-      condition: '良好',
-      distanceMeters: 540,
-      summary: '鍋、爐頭和兩套餐具。社區內免費借用，煤氣罐請自備。',
-      rating: 5,
-      reviewCount: 4,
-      handovers: 4,
-      district: HkDistrict.saiKung,
-    ),
-    ShareItem(
-      id: 'cart',
-      name: '摺疊手推車',
-      owner: '吳先生',
-      category: ItemCategory.tool,
-      condition: '有使用痕跡',
-      distanceMeters: 300,
-      dailyPrice: 25,
-      summary: '搬紙箱、飲用水或活動物資。輪子正常，承重約 40 公斤。',
-      rating: 4.3,
-      reviewCount: 11,
-      handovers: 14,
-      district: HkDistrict.shamShuiPo,
-    ),
-  ];
-}
+/// Production catalog starts empty; real listings come from users / remote DB.
+List<ShareItem> seedItems() => const [];

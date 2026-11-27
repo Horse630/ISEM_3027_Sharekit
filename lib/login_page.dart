@@ -162,7 +162,7 @@ class _LoginPageState extends State<LoginPage> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 16,
-                      color: Color(0xFF3E4A44),
+                      color: Color(0xFF3E4E62),
                     ),
                   ),
                   const SizedBox(height: 28),

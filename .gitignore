@@ -27,6 +27,7 @@ migrate_working_dir/
 atlas-credentials.env
 .env
 *.env
+.sharekit.local
 
 # Local SQLite databases
 *.db

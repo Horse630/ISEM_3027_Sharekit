@@ -47,6 +47,19 @@ String categoryLabel(BuildContext context, ItemCategory category) {
   return tr(context, category.label, category.en);
 }
 
+String sizeText(BuildContext context, ShareItem item) {
+  String number(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+  final parts = <String>[
+    if (item.lengthCm != null) tr(context, '長 ${number(item.lengthCm!)}', 'L ${number(item.lengthCm!)}'),
+    if (item.widthCm != null) tr(context, '闊 ${number(item.widthCm!)}', 'W ${number(item.widthCm!)}'),
+    if (item.heightCm != null) tr(context, '高 ${number(item.heightCm!)}', 'H ${number(item.heightCm!)}'),
+  ];
+  if (parts.isEmpty) return '';
+  return '${parts.join(' × ')} cm';
+}
+
 String handoverLabel(BuildContext context, HandoverMethod method) {
   return tr(context, method.label, method.en);
 }

@@ -40,7 +40,7 @@ class PriceChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final free = item.isFree;
-    final color = free ? const Color(0xFF0E6B52) : const Color(0xFF8C6239);
+    final color = free ? const Color(0xFF003070) : const Color(0xFF8C6239);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -83,7 +83,7 @@ class StageTrack extends StatelessWidget {
                 height: 2,
                 margin: const EdgeInsets.only(bottom: 18),
                 color: i < active
-                    ? const Color(0xFF0E6B52)
+                    ? const Color(0xFF003070)
                     : const Color(0xFFD9D3C8),
               ),
             ),
@@ -102,7 +102,7 @@ class _Node extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = done ? const Color(0xFF0E6B52) : const Color(0xFFB7AFA3);
+    final color = done ? const Color(0xFF003070) : const Color(0xFFB7AFA3);
     return Column(
       children: [
         Container(
@@ -158,7 +158,7 @@ Future<DistrictFilter?> showHkDistrictSheet(
                 contentPadding: EdgeInsets.zero,
                 title: Text(tr(context, '全港', 'All Hong Kong')),
                 trailing: selected == null
-                    ? const Icon(Icons.check, color: Color(0xFF0E6B52))
+                    ? const Icon(Icons.check, color: Color(0xFF003070))
                     : null,
                 onTap: () =>
                     Navigator.of(context).pop(const DistrictFilter(null)),

@@ -32,6 +32,7 @@ class AppUser {
     this.photo,
     this.address = '',
     this.district = HkDistrict.kowloonCity,
+    this.hkidUploaded = false,
   });
 
   final int id;
@@ -43,6 +44,7 @@ class AppUser {
   final Uint8List? photo;
   final String address;
   final HkDistrict district;
+  final bool hkidUploaded;
 
   String get label => displayName.trim().isEmpty ? name : displayName.trim();
 }
@@ -109,7 +111,7 @@ class AuthRepository {
         p.join(await getDatabasesPath(), 'sharekit.db');
     _db = await openDatabase(
       path,
-      version: 9,
+      version: 11,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -123,7 +125,9 @@ class AuthRepository {
             community_joined INTEGER NOT NULL DEFAULT 0,
             photo BLOB,
             address TEXT,
-            district TEXT
+            district TEXT,
+            hkid_uploaded INTEGER NOT NULL DEFAULT 0,
+            hkid BLOB
           )
         ''');
         await db.execute('''
@@ -206,6 +210,37 @@ class AuthRepository {
             await db.execute("ALTER TABLE messages ADD COLUMN booking_id TEXT NOT NULL DEFAULT ''");
           }
         }
+        if (oldVersion < 10) {
+          final userColumns = await db.rawQuery('PRAGMA table_info(users)');
+          if (!userColumns.any((row) => row['name'] == 'hkid_uploaded')) {
+            await db.execute(
+              'ALTER TABLE users ADD COLUMN hkid_uploaded INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+          if (!userColumns.any((row) => row['name'] == 'hkid')) {
+            await db.execute('ALTER TABLE users ADD COLUMN hkid BLOB');
+          }
+          final itemColumns = await db.rawQuery('PRAGMA table_info(items)');
+          if (!itemColumns.any((row) => row['name'] == 'deposit_amount')) {
+            await db.execute(
+              'ALTER TABLE items ADD COLUMN deposit_amount REAL NOT NULL DEFAULT 0',
+            );
+          }
+          final bookingColumns = await db.rawQuery('PRAGMA table_info(bookings)');
+          if (!bookingColumns.any((row) => row['name'] == 'deposit_amount')) {
+            await db.execute(
+              'ALTER TABLE bookings ADD COLUMN deposit_amount REAL NOT NULL DEFAULT 0',
+            );
+          }
+        }
+        if (oldVersion < 11) {
+          final itemColumns = await db.rawQuery('PRAGMA table_info(items)');
+          for (final name in ['length_cm', 'width_cm', 'height_cm']) {
+            if (!itemColumns.any((row) => row['name'] == name)) {
+              await db.execute('ALTER TABLE items ADD COLUMN $name REAL');
+            }
+          }
+        }
         if (oldVersion < 9) {
           final columns = await db.rawQuery('PRAGMA table_info(bookings)');
           for (final entry in <String, String>{
@@ -232,7 +267,7 @@ class AuthRepository {
     final rows = await db.rawQuery('''
       SELECT users.id, users.name, users.display_name, users.contact,
              users.verified, users.community_joined, users.photo,
-             users.address, users.district
+             users.address, users.district, users.hkid_uploaded
       FROM sessions
       JOIN users ON users.id = sessions.user_id
       WHERE sessions.id = 1
@@ -394,6 +429,43 @@ class AuthRepository {
     return _userFrom(rows.first);
   }
 
+  Future<AppUser> submitHkid({
+    required int userId,
+    required Uint8List bytes,
+  }) async {
+    final shrunk = shrinkPhotoBytes(bytes) ?? bytes;
+    if (_useRemote) return _remoteSubmitHkid(userId: userId, bytes: shrunk);
+    await _database.update(
+      'users',
+      {'hkid_uploaded': 1, 'hkid': shrunk},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+    final rows = await _database.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    return _userFrom(rows.first);
+  }
+
+  Future<Uint8List?> hkidPreview(AppUser user) async {
+    if (_useRemote) {
+      final prefs = await SharedPreferences.getInstance();
+      return _photoOf(prefs.getString('sharekit_hkid_${user.name}'));
+    }
+    final rows = await _database.query(
+      'users',
+      columns: ['hkid'],
+      where: 'id = ?',
+      whereArgs: [user.id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _photoOf(rows.first['hkid']);
+  }
+
   Future<AppUser> joinCommunity(int userId) async {
     if (_useRemote) return _remoteJoinCommunity(userId);
     await _database.update(
@@ -449,6 +521,10 @@ class AuthRepository {
         review_count INTEGER NOT NULL,
         handovers INTEGER NOT NULL,
         daily_price REAL,
+        deposit_amount REAL NOT NULL DEFAULT 0,
+        length_cm REAL,
+        width_cm REAL,
+        height_cm REAL,
         photo BLOB,
         address TEXT NOT NULL,
         handover TEXT NOT NULL,
@@ -465,6 +541,7 @@ class AuthRepository {
         pickup_code TEXT NOT NULL,
         note TEXT NOT NULL,
         deposit TEXT NOT NULL,
+        deposit_amount REAL NOT NULL DEFAULT 0,
         borrower TEXT NOT NULL DEFAULT '',
         borrower_account TEXT NOT NULL DEFAULT '',
         owner_review_stars INTEGER,
@@ -699,6 +776,22 @@ class AuthRepository {
     return _userFromRemote(row);
   }
 
+  Future<AppUser> _remoteSubmitHkid({
+    required int userId,
+    required Uint8List bytes,
+  }) async {
+    await _loadRemoteUsers();
+    final row = _remoteById(userId);
+    row['hkid_uploaded'] = 1;
+    await _api.replace('users', row['_id'] as String, row);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'sharekit_hkid_${row['name']}',
+      base64Encode(bytes),
+    );
+    return _userFromRemote(row);
+  }
+
   Future<AppUser> _remoteJoinCommunity(int userId) async {
     await _loadRemoteUsers();
     final row = _remoteById(userId);
@@ -768,6 +861,7 @@ class AuthRepository {
       photo: _photoOf(row['photo']),
       address: (row['address'] as String?) ?? '',
       district: HkDistrict.byName(row['district'] as String?),
+      hkidUploaded: _flag(row['hkid_uploaded']),
     );
   }
 
@@ -803,6 +897,7 @@ class AuthRepository {
       'verified': 1,
       'display_name': demoName,
       'community_joined': 1,
+      'hkid_uploaded': 1,
     });
   }
 
@@ -812,6 +907,7 @@ class AuthRepository {
       {
         'verified': 1,
         'community_joined': 1,
+        'hkid_uploaded': 1,
         'display_name': demoName,
         'contact': 'isem3027@sharekit.local',
       },
@@ -832,6 +928,7 @@ class AuthRepository {
       photo: photo is Uint8List ? photo : null,
       address: (row['address'] as String?) ?? '',
       district: HkDistrict.byName(row['district'] as String?),
+      hkidUploaded: (row['hkid_uploaded'] as int? ?? 0) == 1,
     );
   }
 

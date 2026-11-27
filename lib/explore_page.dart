@@ -40,7 +40,7 @@ class _ExplorePageState extends State<ExplorePage> {
       sort: _sort,
     );
     final place = _district == null
-        ? tr(context, '全港', 'All Hong Kong')
+        ? tr(context, '香港浸會大學', 'HKBU Campus')
         : districtLabel(context, _district!);
 
     return SafeArea(
@@ -59,10 +59,10 @@ class _ExplorePageState extends State<ExplorePage> {
           Text(
             tr(
               context,
-              '先選地區，再借附近的人已經有的東西。',
-              'Pick a district, then borrow what people nearby already have.',
+              '你在香港浸會大學。向同學借雨傘、充電器、活動物資。',
+              'You are at HKBU. Borrow umbrellas, chargers, and event gear from classmates.',
             ),
-            style: const TextStyle(fontSize: 16, color: Color(0xFF3E4A44)),
+            style: const TextStyle(fontSize: 16, color: Color(0xFF3E4E62)),
           ),
           const SizedBox(height: 14),
           const _PilotCard(),
@@ -71,7 +71,11 @@ class _ExplorePageState extends State<ExplorePage> {
             controller: _query,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: tr(context, '搜尋電鑽、露營、摺枱…', 'Search drills, camping, tables…'),
+              hintText: tr(
+                context,
+                '搜尋雨傘、充電器、摺枱…',
+                'Search umbrellas, chargers, tables…',
+              ),
               prefixIcon: const Icon(Icons.search),
             ),
           ),
@@ -149,11 +153,15 @@ class _ExplorePageState extends State<ExplorePage> {
               padding: const EdgeInsets.only(top: 28),
               child: Text(
                 _mineOnly
-                    ? tr(context, '你還沒有上架物品。', 'You have not listed anything yet.')
+                    ? tr(
+                        context,
+                        '你還沒有上架物品。',
+                        'You have not listed anything yet.',
+                      )
                     : tr(
                         context,
-                        '這個地區暫時沒有符合的物品。可以改選其他區，或自己上架。',
-                        'Nothing in this district matches. Try another district, or list an item.',
+                        '校園暫時沒有符合的物品。可以改篩選條件，或自己上架。',
+                        'Nothing on campus matches. Change filters, or list an item.',
                       ),
               ),
             )
@@ -189,16 +197,16 @@ class _PilotCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF14352C),
+        color: const Color(0xFF003070),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            tr(context, '香港十八區 · 社區借用', 'Hong Kong’s 18 districts'),
+            tr(context, '你在香港浸會大學', 'You are at HKBU'),
             style: const TextStyle(
-              color: Color(0xFFE7F3EE),
+              color: Color(0xFFE8F1FB),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -206,10 +214,10 @@ class _PilotCard extends StatelessWidget {
           Text(
             tr(
               context,
-              '先揀你所在的區。電鑽、清潔機、露營裝備很多時一年只用幾次，附近已經有人擁有。',
-              'Start with your district. Drills, cleaners, and camping gear are often used only a few times a year.',
+              'ShareKit 浸大校園試點：同學之間借用雨傘、充電器、活動道具等不常用物品。',
+              'ShareKit HKBU campus pilot: classmates lend umbrellas, chargers, event props, and other rarely used items.',
             ),
-            style: const TextStyle(color: Color(0xFFD5E4DC), height: 1.4),
+            style: const TextStyle(color: Color(0xFFD0E4F7), height: 1.4),
           ),
         ],
       ),

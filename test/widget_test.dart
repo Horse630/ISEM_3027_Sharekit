@@ -11,6 +11,41 @@ import 'package:sharekit/store.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+List<ShareItem> fixtureItems() {
+  return const [
+    ShareItem(
+      id: 'drill',
+      name: '充電電鑽套裝',
+      owner: '陳先生',
+      category: ItemCategory.tool,
+      condition: '良好',
+      distanceMeters: 180,
+      dailyPrice: 40,
+      summary: '附兩枚電池、常用鑽咀和充電座。適合裝窗簾桿、層架，用完即還。',
+      rating: 4.8,
+      reviewCount: 16,
+      handovers: 21,
+      address: '香港浸會大學校園',
+      district: HkDistrict.kowloonCity,
+    ),
+    ShareItem(
+      id: 'camp',
+      name: '雙人露營套裝',
+      owner: '黃同學',
+      category: ItemCategory.outdoor,
+      condition: '有使用痕跡',
+      distanceMeters: 650,
+      dailyPrice: 80,
+      summary: '帳幕、防潮墊和兩支頭燈。',
+      rating: 4.7,
+      reviewCount: 7,
+      handovers: 8,
+      address: '香港浸會大學校園',
+      district: HkDistrict.shaTin,
+    ),
+  ];
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   sqfliteFfiInit();
@@ -38,7 +73,11 @@ void main() {
   Future<ShareStore> openApp(WidgetTester tester) async {
     final store = ShareStore();
     await tester.pumpWidget(
-      ShareKitApp(store: store, databasePath: nextDatabase()),
+      ShareKitApp(
+        store: store,
+        databasePath: nextDatabase(),
+        seed: fixtureItems,
+      ),
     );
     await settleDatabase(tester);
     await signIn(tester);
@@ -47,13 +86,18 @@ void main() {
 
   testWidgets('輸入帳號密碼後進入探索頁', (tester) async {
     await tester.pumpWidget(
-      ShareKitApp(store: ShareStore(), databasePath: nextDatabase()),
+      ShareKitApp(
+        store: ShareStore(),
+        databasePath: nextDatabase(),
+        seed: fixtureItems,
+      ),
     );
     await settleDatabase(tester);
     expect(find.text('登入'), findsOneWidget);
     expect(find.text('還沒有帳號？註冊'), findsOneWidget);
     await signIn(tester);
     expect(find.text('充電電鑽套裝'), findsOneWidget);
+    expect(find.text('你在香港浸會大學'), findsOneWidget);
     expect(find.text('Isem_3027'), findsWidgets);
   });
 
@@ -61,7 +105,7 @@ void main() {
     await openApp(tester);
     await tester.tap(find.text('充電電鑽套裝'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('九龍塘示範屋苑'), findsOneWidget);
+    expect(find.textContaining('香港浸會大學校園'), findsOneWidget);
     expect(find.text('交接方式：當面交接'), findsOneWidget);
     await tester.tap(find.text('聯絡物主'));
     await settleDatabase(tester);
@@ -80,9 +124,11 @@ void main() {
     await tester.tap(find.text('上架'));
     await tester.pumpAndSettle();
     expect(find.text('你的地址'), findsOneWidget);
-    expect(find.text('當面交接'), findsOneWidget);
-    expect(find.text('郵寄'), findsOneWidget);
-    await tester.tap(find.text('發佈到本社區'));
+    expect(find.text('交接方式：當面交接'), findsOneWidget);
+    expect(find.text('郵寄'), findsNothing);
+    expect(find.text('長'), findsOneWidget);
+    expect(find.text('其他'), findsOneWidget);
+    await tester.tap(find.text('發佈到浸大校園'));
     await tester.pumpAndSettle();
     expect(find.text('請填寫名稱、地址和簡介。'), findsOneWidget);
   });
@@ -91,6 +137,7 @@ void main() {
     await openApp(tester);
     expect(find.text('ShareKit'), findsOneWidget);
     expect(find.text('充電電鑽套裝'), findsOneWidget);
+    expect(find.text('其他'), findsWidgets);
   });
 
   testWidgets('可以按香港十八區篩選，並在設定改名稱', (tester) async {
@@ -159,10 +206,11 @@ void main() {
       condition: '良好',
       summary: '三級鋁梯',
       dailyPrice: 10,
+      depositAmount: 0,
       photoBytes: Uint8List.fromList([9, 8, 7]),
-      address: '九龍塘1座',
+      address: '浸大會堂',
       district: HkDistrict.kowloonCity,
-      handover: HandoverMethod.mail,
+      handover: HandoverMethod.faceToFace,
     );
     await first.persisted;
     await auth.close();
@@ -173,9 +221,9 @@ void main() {
     await second.attach(LocalCatalog(reopened.database, seed: seedItems));
     final item = second.items.firstWhere((item) => item.name == '測試梯子');
     expect(item.owner, 'Isem_3027');
-    expect(item.address, '九龍塘1座');
+    expect(item.address, '浸大會堂');
     expect(item.district, HkDistrict.kowloonCity);
-    expect(item.handover, HandoverMethod.mail);
+    expect(item.handover, HandoverMethod.faceToFace);
     expect(item.photoBytes, Uint8List.fromList([9, 8, 7]));
     await reopened.close();
   });

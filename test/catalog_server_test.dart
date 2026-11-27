@@ -61,6 +61,7 @@ void main() {
       condition: '良好',
       summary: '給另一個瀏覽器看',
       dailyPrice: null,
+      depositAmount: 0,
       photoBytes: Uint8List.fromList([4, 5, 6]),
       address: '九龍塘2座',
       district: HkDistrict.kowloonCity,

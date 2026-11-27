@@ -45,6 +45,39 @@ class UiSettings extends ChangeNotifier {
   }
 }
 
+class _LocationTag extends StatelessWidget {
+  const _LocationTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF003070),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.location_on, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              tr(context, '地點：HKBU', 'Location: HKBU'),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
     super.key,
@@ -180,21 +213,30 @@ class _SettingsPageState extends State<SettingsPage> {
             tr(context, '設定', 'Settings'),
             style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
+          const _LocationTag(),
+          const SizedBox(height: 8),
+          Text(
+            widget.user.hkidUploaded
+                ? tr(context, '香港身份證：已上載', 'HKID: uploaded')
+                : tr(context, '香港身份證：未上載', 'HKID: not uploaded'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
           Text(
             tr(
               context,
               '登入名稱 ${widget.user.name} · ${widget.user.verified ? '已驗證' : '尚未驗證'}',
               'Login ${widget.user.name} · ${widget.user.verified ? 'Verified' : 'Not verified'}',
             ),
-            style: const TextStyle(color: Color(0xFF5E6A64)),
+            style: const TextStyle(color: Color(0xFF5A6A80)),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
               CircleAvatar(
                 radius: 36,
-                backgroundColor: const Color(0xFF0E6B52).withValues(alpha: 0.12),
+                backgroundColor: const Color(0xFF003070).withValues(alpha: 0.12),
                 backgroundImage: _photo == null ? null : MemoryImage(_photo!),
                 child: _photo == null
                     ? const Icon(Icons.person_outline, size: 32)
@@ -255,7 +297,11 @@ class _SettingsPageState extends State<SettingsPage> {
             controller: _address,
             decoration: InputDecoration(
               labelText: tr(context, '聯絡地址', 'Address'),
-              hintText: tr(context, '例如：九龍塘XX座X樓', 'For example: Tower 1, Kowloon Tong'),
+              hintText: tr(
+                context,
+                '例如：浸大會堂 / 宿舍 X 座',
+                'For example: HKBU Academic Community Hall / Hall X',
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -322,6 +368,8 @@ class _SettingsPageState extends State<SettingsPage> {
               );
             },
           ),
+          const SizedBox(height: 20),
+          const _TermsSection(),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _busy ? null : _save,
@@ -344,6 +392,41 @@ class _SettingsPageState extends State<SettingsPage> {
       );
         },
       ),
+    );
+  }
+}
+
+class _TermsSection extends StatelessWidget {
+  const _TermsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese = '''
+1. ShareKit 是香港浸會大學校園借用試點。帳號視作浸大校園使用者。
+2. 使用前必須上載香港身份證相片。未上載者不能瀏覽、上架或預約。
+3. 物主上架時可自訂按金。借用成立後，按金由平台暫存，不會直接交給物主。物品歸還並確認後，平台才把按金退回借用者。
+4. 租金由物主訂定。平台不另收服務費。
+5. 借用者須按約定時間取件、使用和歸還，並保持物品狀況。損壞、遺失或逾期由雙方按平台記錄處理。
+6. 平台可因虛假資料、未完成身份核對或違規使用而暫停帳號。
+7. 這是課堂示範條款，不構成正式法律意見。''';
+    final english = '''
+1. ShareKit is an HKBU campus borrowing pilot. Accounts are treated as campus users.
+2. You must upload an HKID photo before using the app. Without it you cannot browse, list, or book.
+3. The owner sets the deposit. The platform holds it and does not pay it to the owner. It is returned to the borrower after the item is returned and confirmed.
+4. The owner sets the rent. The platform adds no fee.
+5. Borrowers collect, use, and return items on time and keep them in the agreed condition. Damage, loss, or lateness is handled from the platform record.
+6. The platform may suspend an account for false details, missing identity checks, or misuse.
+7. These terms are for a class demo and are not formal legal advice.''';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          tr(context, '條款及細則', 'Terms and conditions'),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        Text(tr(context, chinese, english), style: const TextStyle(height: 1.45)),
+      ],
     );
   }
 }

@@ -94,7 +94,7 @@ class _BookingCard extends StatelessWidget {
                 stageLabel(context, booking.stage),
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF0E6B52),
+                  color: Color(0xFF003070),
                 ),
               ),
             ],
@@ -138,7 +138,7 @@ class BookingDetailPage extends StatelessWidget {
             stageLabel(context, booking.stage),
             style: const TextStyle(
               fontWeight: FontWeight.w800,
-              color: Color(0xFF0E6B52),
+              color: Color(0xFF003070),
             ),
           ),
           const SizedBox(height: 4),
@@ -168,7 +168,13 @@ class BookingDetailPage extends StatelessWidget {
           ),
           InfoLine(
             icon: Icons.account_balance_wallet_outlined,
-            text: depositLabel(context, booking.deposit),
+            text: booking.depositAmount <= 0
+                ? depositLabel(context, booking.deposit)
+                : tr(
+                    context,
+                    '按金 ${money(booking.depositAmount)} · ${depositLabel(context, booking.deposit)} · 由平台暫存，歸還後退回',
+                    'Deposit ${money(booking.depositAmount)} · ${depositLabel(context, booking.deposit)} · held by the platform until return',
+                  ),
           ),
           if (booking.issue != null)
             InfoLine(
@@ -531,13 +537,29 @@ class DepositPage extends StatelessWidget {
           Text(
             tr(
               context,
-              '這是付給物主的租金，平台不另收費。確認後會標記為已付。',
-              'This rent goes to the owner. The platform adds no fee.',
+              booking.depositAmount > 0
+                  ? '按金由平台暫存，歸還後退回。租金若選線上付款，會一併支付；若選當面付款，租金稍後交給物主。'
+                  : '這是付給物主的租金，平台不另收費。確認後會標記為已付。',
+              booking.depositAmount > 0
+                  ? 'The platform holds the deposit and returns it after the item comes back. Online rent is paid here. In-person rent is paid to the owner later.'
+                  : 'This rent goes to the owner. The platform adds no fee.',
             ),
           ),
           const SizedBox(height: 16),
+          if (!quote.free && booking.payMethod == PayMethod.online)
+            Text(tr(context, '租金 ${money(quote.rent)}', 'Rent ${money(quote.rent)}')),
+          if (booking.depositAmount > 0)
+            Text(tr(
+              context,
+              '按金 ${money(booking.depositAmount)}（平台暫存）',
+              'Deposit ${money(booking.depositAmount)} (held by the platform)',
+            )),
+          const SizedBox(height: 8),
           Text(
-            money(quote.total),
+            money(
+              (booking.payMethod == PayMethod.online && !quote.free ? quote.rent : 0) +
+                  booking.depositAmount,
+            ),
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 16),
@@ -549,7 +571,13 @@ class DepositPage extends StatelessWidget {
                 itemId: latest.itemId,
                 sender: latest.borrower,
                 body: [
-                  both('租金已付。', 'The rent is paid.'),
+                  if (latest.payMethod == PayMethod.online && !quote.free)
+                    both('租金已付。', 'The rent is paid.'),
+                  if (latest.depositAmount > 0)
+                    both(
+                      '按金 ${money(latest.depositAmount)} 已付，由平台暫存。',
+                      'Deposit ${money(latest.depositAmount)} is paid and held by the platform.',
+                    ),
                   '交接碼 / Exchange code：${latest.pickupCode}',
                 ].join('\n'),
                 kind: 'code',

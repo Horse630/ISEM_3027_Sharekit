@@ -94,7 +94,16 @@ extension ItemSortX on ItemSort {
   };
 }
 
-enum ItemCategory { tool, home, outdoor, event }
+enum ItemCategory {
+  tool,
+  home,
+  outdoor,
+  event,
+  electronics,
+  books,
+  sports,
+  others,
+}
 
 extension ItemCategoryX on ItemCategory {
   String get label => switch (this) {
@@ -102,6 +111,10 @@ extension ItemCategoryX on ItemCategory {
     ItemCategory.home => '家居',
     ItemCategory.outdoor => '戶外',
     ItemCategory.event => '活動',
+    ItemCategory.electronics => '電子',
+    ItemCategory.books => '書籍',
+    ItemCategory.sports => '運動',
+    ItemCategory.others => '其他',
   };
 
   String get en => switch (this) {
@@ -109,6 +122,10 @@ extension ItemCategoryX on ItemCategory {
     ItemCategory.home => 'Home',
     ItemCategory.outdoor => 'Outdoor',
     ItemCategory.event => 'Events',
+    ItemCategory.electronics => 'Electronics',
+    ItemCategory.books => 'Books',
+    ItemCategory.sports => 'Sports',
+    ItemCategory.others => 'Others',
   };
 
   IconData get icon => switch (this) {
@@ -116,14 +133,29 @@ extension ItemCategoryX on ItemCategory {
     ItemCategory.home => Icons.cleaning_services_outlined,
     ItemCategory.outdoor => Icons.forest_outlined,
     ItemCategory.event => Icons.event_seat_outlined,
+    ItemCategory.electronics => Icons.devices_outlined,
+    ItemCategory.books => Icons.menu_book_outlined,
+    ItemCategory.sports => Icons.sports_tennis_outlined,
+    ItemCategory.others => Icons.category_outlined,
   };
 
   Color get color => switch (this) {
-    ItemCategory.tool => const Color(0xFF0E6B52),
+    ItemCategory.tool => const Color(0xFF003070),
     ItemCategory.home => const Color(0xFF8C6239),
     ItemCategory.outdoor => const Color(0xFF1D6A86),
     ItemCategory.event => const Color(0xFF9A4632),
+    ItemCategory.electronics => const Color(0xFF355C7D),
+    ItemCategory.books => const Color(0xFF6B4F3A),
+    ItemCategory.sports => const Color(0xFF2F6B4F),
+    ItemCategory.others => const Color(0xFF5A5A5A),
   };
+
+  static ItemCategory parse(String? name) {
+    for (final category in ItemCategory.values) {
+      if (category.name == name) return category;
+    }
+    return ItemCategory.others;
+  }
 }
 
 enum PayMethod { online, face }
@@ -140,7 +172,14 @@ extension PayMethodX on PayMethod {
   };
 }
 
-enum BookingStage { requested, rejected, reserved, pickedUp, returned, reviewed }
+enum BookingStage {
+  requested,
+  rejected,
+  reserved,
+  pickedUp,
+  returned,
+  reviewed,
+}
 
 enum HandoverMethod { faceToFace, mail }
 
@@ -194,7 +233,9 @@ extension BookingStageX on BookingStage {
   };
 
   int get trackStep => switch (this) {
-    BookingStage.requested || BookingStage.rejected || BookingStage.reserved => 0,
+    BookingStage.requested ||
+    BookingStage.rejected ||
+    BookingStage.reserved => 0,
     BookingStage.pickedUp => 1,
     BookingStage.returned => 2,
     BookingStage.reviewed => 3,
@@ -219,8 +260,12 @@ class ShareItem {
     required this.reviewCount,
     required this.handovers,
     this.dailyPrice,
+    this.depositAmount = 0,
+    this.lengthCm,
+    this.widthCm,
+    this.heightCm,
     this.photoBytes,
-    this.address = '九龍塘示範屋苑',
+    this.address = '香港浸會大學校園',
     this.district = HkDistrict.kowloonCity,
     this.handover = HandoverMethod.faceToFace,
   });
@@ -236,6 +281,10 @@ class ShareItem {
   final int reviewCount;
   final int handovers;
   final double? dailyPrice;
+  final double depositAmount;
+  final double? lengthCm;
+  final double? widthCm;
+  final double? heightCm;
   final Uint8List? photoBytes;
   final String address;
   final HkDistrict district;
@@ -264,6 +313,10 @@ class ShareItem {
       reviewCount: reviewCount ?? this.reviewCount,
       handovers: handovers ?? this.handovers,
       dailyPrice: dailyPrice,
+      depositAmount: depositAmount,
+      lengthCm: lengthCm,
+      widthCm: widthCm,
+      heightCm: heightCm,
       photoBytes: photoBytes,
       address: address,
       district: district ?? this.district,
@@ -283,6 +336,7 @@ class Booking {
     required this.note,
     this.payMethod = PayMethod.online,
     this.deposit = DepositStatus.none,
+    this.depositAmount = 0,
     this.borrower = '',
     this.borrowerAccount = '',
     this.ownerReviewStars,
@@ -303,6 +357,7 @@ class Booking {
   final String note;
   final PayMethod payMethod;
   final DepositStatus deposit;
+  final double depositAmount;
   final String borrower;
   final String borrowerAccount;
   final int? ownerReviewStars;
@@ -339,6 +394,7 @@ class Booking {
       note: note,
       payMethod: payMethod ?? this.payMethod,
       deposit: deposit ?? this.deposit,
+      depositAmount: depositAmount,
       borrower: borrower ?? this.borrower,
       borrowerAccount: borrowerAccount ?? this.borrowerAccount,
       ownerReviewStars: ownerReviewStars ?? this.ownerReviewStars,

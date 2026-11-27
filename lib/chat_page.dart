@@ -107,7 +107,7 @@ class _ChatPageState extends State<ChatPage> {
             child: Text(
               tr(
                 context,
-                '關於「${widget.itemName}」。可以約好當面交接或郵寄。',
+                '關於「${widget.itemName}」。可以約好當面交接。',
                 'About “${widget.itemName}”. Agree a handover here.',
               ),
               style: const TextStyle(color: Color(0xFF5E6A64)),
@@ -252,7 +252,7 @@ class _Bubble extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               constraints: const BoxConstraints(maxWidth: 320),
               decoration: BoxDecoration(
-                color: mine ? const Color(0xFF0E6B52) : Colors.white,
+                color: mine ? const Color(0xFF003070) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(

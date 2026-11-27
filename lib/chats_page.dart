@@ -150,10 +150,10 @@ class _ThreadTile extends StatelessWidget {
           child: Row(
             children: [
               CircleAvatar(
-                backgroundColor: const Color(0xFF0E6B52).withValues(alpha: 0.12),
+                backgroundColor: const Color(0xFF003070).withValues(alpha: 0.12),
                 child: const Icon(
                   Icons.chat_bubble_outline,
-                  color: Color(0xFF0E6B52),
+                  color: Color(0xFF003070),
                 ),
               ),
               const SizedBox(width: 12),

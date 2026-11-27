@@ -123,6 +123,20 @@ class ItemDetailPage extends StatelessWidget {
                     'The owner sets the rent. The platform adds no fee.',
                   ),
           ),
+          if (item.depositAmount > 0)
+            InfoLine(
+              icon: Icons.account_balance_outlined,
+              text: tr(
+                context,
+                '按金 ${money(item.depositAmount)}，由平台暫存，歸還後退回借用者。線上或當面付款都要先付按金。',
+                'Deposit ${money(item.depositAmount)} is held by the platform and returned after the item comes back. Pay it whether you pay the rent online or in person.',
+              ),
+            ),
+          if (sizeText(context, item).isNotEmpty)
+            InfoLine(
+              icon: Icons.straighten,
+              text: tr(context, '尺寸 ${sizeText(context, item)}', 'Size ${sizeText(context, item)}'),
+            ),
           const SizedBox(height: 16),
           Text(
             tr(context, '評價', 'Reviews'),
@@ -395,6 +409,7 @@ class _BookPageState extends State<BookPage> {
       '日期 / Dates：${formatDate(booking.start)} – ${formatDate(booking.end)}',
       '付款 / Payment：$payLabel',
       '租金 / Rent：$rent',
+      '按金 / Deposit：${item.depositAmount > 0 ? money(item.depositAmount) : '無 / None'}',
       if (note.isNotEmpty) '備註 / Note：$note',
     ];
     await account.auth.sendMessage(
@@ -495,7 +510,15 @@ class _BookPageState extends State<BookPage> {
           _FeeRow(label: tr(context, '日數', 'Days'), value: '${quote.days}'),
           _FeeRow(
             label: tr(context, '租金', 'Rent'),
-            value: quote.free ? tr(context, '免費', 'Free') : money(quote.rent),
+            value: quote.free
+                ? tr(context, '免費', 'Free')
+                : _pay == PayMethod.face
+                    ? '${money(quote.rent)} · ${tr(context, '當面交', 'Pay in person')}'
+                    : money(quote.rent),
+          ),
+          _FeeRow(
+            label: tr(context, '按金（平台暫存）', 'Deposit (held by platform)'),
+            value: item.depositAmount > 0 ? money(item.depositAmount) : tr(context, '無', 'None'),
           ),
           _FeeRow(
             label: tr(context, '平台費', 'Platform fee'),
@@ -503,10 +526,23 @@ class _BookPageState extends State<BookPage> {
           ),
           const Divider(),
           _FeeRow(
-            label: tr(context, '合計', 'Total'),
-            value: quote.free ? 'HK\$0' : money(quote.total),
+            label: tr(context, '今次要付', 'Pay now'),
+            value: money(
+              (_pay == PayMethod.online && !quote.free ? quote.rent : 0) + item.depositAmount,
+            ),
             strong: true,
           ),
+          if (item.depositAmount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                tr(
+                  context,
+                  '物主已設定按金。不論線上或當面付租金，都要先把按金付給平台暫存。',
+                  'The owner set a deposit. Pay it to the platform whether the rent is online or in person.',
+                ),
+              ),
+            ),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: const TextStyle(color: Color(0xFF9A4632))),
@@ -589,6 +625,38 @@ class _FeeRow extends StatelessWidget {
   }
 }
 
+double? _readCm(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+  return double.tryParse(text);
+}
+
+bool _badCm(TextEditingController controller) {
+  final text = controller.text.trim();
+  if (text.isEmpty) return false;
+  final value = double.tryParse(text);
+  return value == null || value < 0;
+}
+
+class _SizeField extends StatelessWidget {
+  const _SizeField({required this.controller, required this.label});
+
+  final TextEditingController controller;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+      ],
+      decoration: InputDecoration(labelText: label),
+    );
+  }
+}
+
 class ListItemPage extends StatefulWidget {
   const ListItemPage({super.key, required this.ownerName});
 
@@ -602,11 +670,14 @@ class _ListItemPageState extends State<ListItemPage> {
   final _name = TextEditingController();
   final _summary = TextEditingController();
   final _price = TextEditingController();
+  final _deposit = TextEditingController();
+  final _length = TextEditingController();
+  final _width = TextEditingController();
+  final _height = TextEditingController();
   final _address = TextEditingController();
   ItemCategory _category = ItemCategory.tool;
   HkDistrict _district = HkDistrict.kowloonCity;
   String _condition = '良好';
-  HandoverMethod _handover = HandoverMethod.faceToFace;
   var _prefilled = false;
   Uint8List? _photo;
   String? _error;
@@ -628,6 +699,10 @@ class _ListItemPageState extends State<ListItemPage> {
     _name.dispose();
     _summary.dispose();
     _price.dispose();
+    _deposit.dispose();
+    _length.dispose();
+    _width.dispose();
+    _height.dispose();
     _address.dispose();
     super.dispose();
   }
@@ -654,6 +729,22 @@ class _ListItemPageState extends State<ListItemPage> {
       }
       dailyPrice = parsed == 0 ? null : parsed;
     }
+    var depositAmount = 0.0;
+    if (_deposit.text.trim().isNotEmpty) {
+      final parsed = double.tryParse(_deposit.text.trim());
+      if (parsed == null || parsed < 0) {
+        setState(() => _error = tr(context, '按金請填數字，或留空代表不用按金。', 'Enter a number for the deposit, or leave it blank.'));
+        return;
+      }
+      depositAmount = parsed;
+    }
+    if (_badCm(_length) || _badCm(_width) || _badCm(_height)) {
+      setState(() => _error = tr(context, '尺寸請填數字，或留空。', 'Enter numbers for the size, or leave them blank.'));
+      return;
+    }
+    final length = _readCm(_length.text);
+    final width = _readCm(_width.text);
+    final height = _readCm(_height.text);
     ShareKitScope.of(context).addItem(
       name: name,
       owner: widget.ownerName,
@@ -661,14 +752,24 @@ class _ListItemPageState extends State<ListItemPage> {
       condition: _condition,
       summary: summary,
       dailyPrice: dailyPrice,
+      depositAmount: depositAmount,
+      lengthCm: length,
+      widthCm: width,
+      heightCm: height,
       photoBytes: photo,
       address: address,
       district: _district,
-      handover: _handover,
+      handover: HandoverMethod.faceToFace,
     );
     ShareKitScope.of(context).openTab(0);
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(tr(context, '已上架到本社區，附近的人可以搜尋到。', 'Listed. People nearby can search for it.'))));
+        .showSnackBar(SnackBar(
+          content: Text(tr(
+            context,
+            '已上架到浸大校園，同學可以搜尋到。',
+            'Listed on the HKBU campus. Classmates can find it.',
+          )),
+        ));
   }
 
   @override
@@ -680,8 +781,8 @@ class _ListItemPageState extends State<ListItemPage> {
         children: [
           Text(tr(
             context,
-            '把家裡不常用的東西借給同一個社區。留空租金即為免費借用。上架必須用相機拍攝當時的物品狀況，不能從相簿上載。',
-            'Lend something you rarely use. Leave the price blank to lend it for free. Take a photo with the camera.',
+            '把不常用的東西借給浸大同學。留空租金即為免費借用。上架必須用相機拍攝當時的物品狀況，不能從相簿上載。',
+            'Lend something you rarely use to HKBU classmates. Leave the price blank for free. Take a photo with the camera.',
           )),
           const SizedBox(height: 16),
           if (_photo != null)
@@ -710,10 +811,46 @@ class _ListItemPageState extends State<ListItemPage> {
             },
             child: Text(_photo == null ? tr(context, '用相機拍攝', 'Take a photo') : tr(context, '重新拍攝', 'Retake')),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () {
+              showDialog<void>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: Text(tr(dialogContext, '建立 3D 模型', 'Create a 3D model')),
+                  content: Text(tr(
+                    dialogContext,
+                    '這個功能暫時還不能使用。',
+                    'This feature is not working yet.',
+                  )),
+                  actions: [
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: Text(tr(dialogContext, '知道了', 'OK')),
+                    ),
+                  ],
+                ),
+              );
+            },
+            icon: const Icon(Icons.view_in_ar_outlined),
+            label: Text(tr(context, '建立 3D 模型', 'Create a 3D model')),
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: _name,
             decoration: InputDecoration(labelText: tr(context, '物品名稱', 'Item name')),
+          ),
+          const SizedBox(height: 12),
+          Text(tr(context, '尺寸（厘米，可留空）', 'Size in cm, optional'), style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _SizeField(controller: _length, label: tr(context, '長', 'Length'))),
+              const SizedBox(width: 8),
+              Expanded(child: _SizeField(controller: _width, label: tr(context, '闊', 'Width'))),
+              const SizedBox(width: 8),
+              Expanded(child: _SizeField(controller: _height, label: tr(context, '高', 'Height'))),
+            ],
           ),
           const SizedBox(height: 12),
           Text(tr(context, '分類', 'Category'), style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -753,6 +890,22 @@ class _ListItemPageState extends State<ListItemPage> {
             decoration: InputDecoration(labelText: tr(context, '每日租金（港元，可留空）', 'Daily rent in HKD, optional')),
           ),
           const SizedBox(height: 12),
+          TextField(
+            controller: _deposit,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            decoration: InputDecoration(
+              labelText: tr(context, '按金（港元，可留空）', 'Deposit in HKD, optional'),
+              helperText: tr(
+                context,
+                '由物主填寫。借用時平台暫存這筆按金，歸還後退回借用者。',
+                'Set by the owner. The platform holds it and returns it after the item comes back.',
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () async {
               final picked = await showHkDistrictSheet(
@@ -771,22 +924,17 @@ class _ListItemPageState extends State<ListItemPage> {
             controller: _address,
             decoration: InputDecoration(
               labelText: tr(context, '你的地址', 'Your address'),
-              hintText: tr(context, '例如：九龍塘XX座X樓', 'For example: Tower 1, Kowloon Tong'),
+              hintText: tr(
+                context,
+                '例如：浸大會堂 / 宿舍 X 座',
+                'For example: HKBU Academic Community Hall / Hall X',
+              ),
             ),
           ),
           const SizedBox(height: 12),
-          Text(tr(context, '交接方式', 'Handover'), style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final method in HandoverMethod.values)
-                ChoiceChip(
-                  label: Text(handoverLabel(context, method)),
-                  selected: _handover == method,
-                  onSelected: (_) => setState(() => _handover = method),
-                ),
-            ],
+          Text(
+            tr(context, '交接方式：當面交接', 'Handover: in person'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -802,7 +950,10 @@ class _ListItemPageState extends State<ListItemPage> {
             Text(_error!, style: const TextStyle(color: Color(0xFF9A4632))),
           ],
           const SizedBox(height: 16),
-          FilledButton(onPressed: _publish, child: Text(tr(context, '發佈到本社區', 'Publish'))),
+          FilledButton(
+            onPressed: _publish,
+            child: Text(tr(context, '發佈到浸大校園', 'Publish to HKBU')),
+          ),
         ],
       ),
     );

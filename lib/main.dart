@@ -8,8 +8,11 @@ import 'catalog_gateway.dart';
 import 'chat_center.dart';
 import 'chats_page.dart';
 import 'explore_page.dart';
+import 'hkid_page.dart';
 import 'item_pages.dart';
 import 'login_page.dart';
+import 'opening_page.dart';
+import 'models.dart';
 import 'store.dart';
 import 'text.dart';
 
@@ -19,10 +22,16 @@ void main() {
 }
 
 class ShareKitApp extends StatefulWidget {
-  const ShareKitApp({super.key, required this.store, this.databasePath});
+  const ShareKitApp({
+    super.key,
+    required this.store,
+    this.databasePath,
+    this.seed,
+  });
 
   final ShareStore store;
   final String? databasePath;
+  final List<ShareItem> Function()? seed;
 
   @override
   State<ShareKitApp> createState() => _ShareKitAppState();
@@ -58,18 +67,12 @@ class _ShareKitAppState extends State<ShareKitApp> {
         if (remote == null) {
           throw StateError('共用資料庫連不上');
         }
-        var snapshot = await remote.load();
-        if (snapshot.items.isEmpty) {
-          snapshot = CatalogSnapshot(
-            items: seedItems(),
-            bookings: const [],
-            sequence: 240,
-          );
-          await remote.save(snapshot);
-        }
         await widget.store.attach(remote);
       } else {
-        final local = LocalCatalog(_auth.database, seed: seedItems);
+        final local = LocalCatalog(
+          _auth.database,
+          seed: widget.seed ?? seedItems,
+        );
         await widget.store.attach(local);
       }
       final user = await _auth.currentUser();
@@ -105,14 +108,27 @@ class _ShareKitAppState extends State<ShareKitApp> {
   Widget build(BuildContext context) {
     final Widget home;
     if (_loading) {
-      home = Scaffold(body: Center(child: Text(tr(context, '正在開啟資料庫…', 'Opening the database…'))));
+      home = const OpeningPage();
     } else if (_error != null) {
-      home = Scaffold(body: Center(child: Text(tr(context, '資料庫打不開：$_error', 'The database did not open: $_error'))));
+      home = Scaffold(
+        body: Center(
+          child: Text(
+            tr(context, '資料庫打不開：$_error', 'The database did not open: $_error'),
+          ),
+        ),
+      );
     } else if (_user == null) {
       home = LoginPage(
         auth: _auth,
         ui: _ui,
         onLoggedIn: (next) => setState(() => _user = next),
+      );
+    } else if (!_user!.hkidUploaded) {
+      home = HkidGatePage(
+        user: _user!,
+        auth: _auth,
+        onSubmitted: (next) => setState(() => _user = next),
+        onLogout: _logout,
       );
     } else {
       home = HomeShell(
@@ -127,34 +143,33 @@ class _ShareKitAppState extends State<ShareKitApp> {
     }
 
     final app = MaterialApp(
-        title: 'ShareKit',
-        debugShowCheckedModeBanner: false,
-        scrollBehavior: const ShareKitScrollBehavior(),
-        theme: _theme(),
-        builder: (context, child) {
-          return AppLang(
-            english: _ui.english,
-            child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(_ui.textScale),
-            ),
+      title: 'ShareKit',
+      debugShowCheckedModeBanner: false,
+      scrollBehavior: const ShareKitScrollBehavior(),
+      theme: _theme(),
+      builder: (context, child) {
+        return AppLang(
+          english: _ui.english,
+          child: MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(_ui.textScale)),
             child: ColoredBox(
-            color: const Color(0xFFE4DDD2),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1200),
-                child: ColoredBox(
-                  color: const Color(0xFFF4F1EB),
-                  child: child ?? const SizedBox.shrink(),
+              color: const Color(0xFFD5E2F2),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: ColoredBox(
+                    color: const Color(0xFFF3F6FB),
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),
           ),
-          ),
-          );
-        },
-        home: home,
-      );
+        );
+      },
+      home: home,
+    );
     final signedIn = _user == null
         ? app
         : AccountScope(user: _user!, auth: _auth, child: app);
@@ -288,110 +303,113 @@ class _HomeShellState extends State<HomeShell> {
       return ChatScope(
         chat: widget.chat,
         child: ListenableBuilder(
-        listenable: widget.chat,
-        builder: (context, _) => Scaffold(
-        body: Row(
-          children: [
-            NavigationRail(
-              selectedIndex: _index,
-              onDestinationSelected: (index) => setState(() => _index = index),
-              labelType: NavigationRailLabelType.all,
-              backgroundColor: Colors.white,
-              destinations: [
-                NavigationRailDestination(
-                  icon: const Icon(Icons.explore_outlined),
-                  selectedIcon: const Icon(Icons.explore),
-                  label: Text(tr(context, '探索', 'Explore')),
+          listenable: widget.chat,
+          builder: (context, _) => Scaffold(
+            body: Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _index,
+                  onDestinationSelected: (index) =>
+                      setState(() => _index = index),
+                  labelType: NavigationRailLabelType.all,
+                  backgroundColor: Colors.white,
+                  destinations: [
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.explore_outlined),
+                      selectedIcon: const Icon(Icons.explore),
+                      label: Text(tr(context, '探索', 'Explore')),
+                    ),
+                    NavigationRailDestination(
+                      icon: _chatIcon(false),
+                      selectedIcon: _chatIcon(true),
+                      label: Text(tr(context, '聊天', 'Chats')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.event_note_outlined),
+                      selectedIcon: const Icon(Icons.event_note),
+                      label: Text(tr(context, '預約', 'Bookings')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.add_box_outlined),
+                      selectedIcon: const Icon(Icons.add_box),
+                      label: Text(tr(context, '上架', 'List')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.settings_outlined),
+                      selectedIcon: const Icon(Icons.settings),
+                      label: Text(tr(context, '設定', 'Settings')),
+                    ),
+                  ],
                 ),
-                NavigationRailDestination(
-                  icon: _chatIcon(false),
-                  selectedIcon: _chatIcon(true),
-                  label: Text(tr(context, '聊天', 'Chats')),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.event_note_outlined),
-                  selectedIcon: const Icon(Icons.event_note),
-                  label: Text(tr(context, '預約', 'Bookings')),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.add_box_outlined),
-                  selectedIcon: const Icon(Icons.add_box),
-                  label: Text(tr(context, '上架', 'List')),
-                ),
-                NavigationRailDestination(
-                  icon: const Icon(Icons.settings_outlined),
-                  selectedIcon: const Icon(Icons.settings),
-                  label: Text(tr(context, '設定', 'Settings')),
+                const VerticalDivider(width: 1, thickness: 1),
+                Expanded(
+                  child: Column(
+                    children: [
+                      accountBar,
+                      Expanded(
+                        child: IndexedStack(index: _index, children: pages),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const VerticalDivider(width: 1, thickness: 1),
-            Expanded(
-              child: Column(
-                children: [
-                  accountBar,
-                  Expanded(child: IndexedStack(index: _index, children: pages)),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
-    ),
-    );
+      );
     }
 
     return ChatScope(
       chat: widget.chat,
       child: ListenableBuilder(
-      listenable: widget.chat,
-      builder: (context, _) => Scaffold(
-      body: Column(
-        children: [
-          accountBar,
-          Expanded(child: IndexedStack(index: _index, children: pages)),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (index) => setState(() => _index = index),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.explore_outlined),
-            selectedIcon: const Icon(Icons.explore),
-            label: tr(context, '探索', 'Explore'),
+        listenable: widget.chat,
+        builder: (context, _) => Scaffold(
+          body: Column(
+            children: [
+              accountBar,
+              Expanded(
+                child: IndexedStack(index: _index, children: pages),
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: _chatIcon(false),
-            selectedIcon: _chatIcon(true),
-            label: tr(context, '聊天', 'Chats'),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: (index) => setState(() => _index = index),
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(Icons.explore_outlined),
+                selectedIcon: const Icon(Icons.explore),
+                label: tr(context, '探索', 'Explore'),
+              ),
+              NavigationDestination(
+                icon: _chatIcon(false),
+                selectedIcon: _chatIcon(true),
+                label: tr(context, '聊天', 'Chats'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.event_note_outlined),
+                selectedIcon: const Icon(Icons.event_note),
+                label: tr(context, '預約', 'Bookings'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.add_box_outlined),
+                selectedIcon: const Icon(Icons.add_box),
+                label: tr(context, '上架', 'List'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.settings_outlined),
+                selectedIcon: const Icon(Icons.settings),
+                label: tr(context, '設定', 'Settings'),
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.event_note_outlined),
-            selectedIcon: const Icon(Icons.event_note),
-            label: tr(context, '預約', 'Bookings'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.add_box_outlined),
-            selectedIcon: const Icon(Icons.add_box),
-            label: tr(context, '上架', 'List'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.settings_outlined),
-            selectedIcon: const Icon(Icons.settings),
-            label: tr(context, '設定', 'Settings'),
-          ),
-        ],
-      ),
-      ),
+        ),
       ),
     );
   }
 
   Widget _chatIcon(bool selected) {
-    final icon = Icon(
-      selected ? Icons.chat_bubble : Icons.chat_bubble_outline,
-    );
+    final icon = Icon(selected ? Icons.chat_bubble : Icons.chat_bubble_outline);
     final count = widget.chat.unread;
     if (count <= 0) return icon;
     return Badge(
@@ -437,7 +455,10 @@ class _AccountBar extends StatelessWidget {
                   ),
                 ),
               ),
-              TextButton(onPressed: onLogout, child: Text(tr(context, '登出', 'Log out'))),
+              TextButton(
+                onPressed: onLogout,
+                child: Text(tr(context, '登出', 'Log out')),
+              ),
             ],
           ),
         ),
@@ -451,20 +472,20 @@ class ShareKitScrollBehavior extends MaterialScrollBehavior {
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.stylus,
-        PointerDeviceKind.trackpad,
-      };
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.trackpad,
+  };
 }
 
 ThemeData _theme() {
-  const ink = Color(0xFF1B2A24);
-  const paper = Color(0xFFF4F1EB);
-  const green = Color(0xFF0E6B52);
+  const ink = Color(0xFF10233F);
+  const paper = Color(0xFFF3F6FB);
+  const blue = Color(0xFF003070);
   final scheme = ColorScheme.fromSeed(
-    seedColor: green,
-    primary: green,
+    seedColor: blue,
+    primary: blue,
     surface: paper,
   );
   return ThemeData(
@@ -480,7 +501,7 @@ ThemeData _theme() {
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: Colors.white,
-      indicatorColor: green.withValues(alpha: 0.16),
+      indicatorColor: blue.withValues(alpha: 0.16),
       labelTextStyle: WidgetStateProperty.all(
         const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
       ),
@@ -495,7 +516,7 @@ ThemeData _theme() {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: green,
+        foregroundColor: blue,
         minimumSize: const Size(64, 52),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -503,7 +524,7 @@ ThemeData _theme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: green,
+        backgroundColor: blue,
         foregroundColor: Colors.white,
         minimumSize: const Size(64, 52),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
