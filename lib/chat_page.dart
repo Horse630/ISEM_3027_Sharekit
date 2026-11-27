@@ -75,6 +75,14 @@ class _ChatPageState extends State<ChatPage> {
 
   bool get _support => widget.ownerName == supportServiceName;
 
+  String _partyTitle() {
+    final user = (widget.clientName ?? widget.senderName).trim();
+    final item = widget.itemName.trim();
+    if (user.isEmpty) return item;
+    if (item.isEmpty) return user;
+    return '$user ($item)';
+  }
+
   Future<void> _load() async {
     final messages = await widget.auth.messagesFor(widget.itemId);
     if (!mounted) return;
@@ -174,9 +182,9 @@ class _ChatPageState extends State<ChatPage> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                _support
-                    ? supportServiceName
-                    : tr(context, '聯絡${widget.ownerName}', 'Message ${widget.ownerName}'),
+                _support ? supportServiceName : _partyTitle(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

@@ -180,11 +180,16 @@ class _ThreadTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final item = store.findItem(thread.itemId);
     final owner = item?.owner ?? '';
+    final itemName = item?.name ?? '';
     final title = thread.support
         ? supportServiceName
-        : thread.asOwner
-            ? thread.client
-            : (item?.name ?? tr(context, '已下架的物品', 'Removed item'));
+        : itemName.isEmpty
+            ? (thread.client.isEmpty
+                ? tr(context, '已下架的物品', 'Removed item')
+                : thread.client)
+            : thread.client.isEmpty
+                ? itemName
+                : '${thread.client} ($itemName)';
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
