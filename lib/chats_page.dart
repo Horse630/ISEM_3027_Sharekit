@@ -12,7 +12,10 @@ String _preview(BuildContext context, ChatMessage message) {
       .split('\n')
       .where((line) => !line.startsWith('#offer '))
       .join(' ');
-  final shown = text.replaceAll(legacySupportServiceName, supportServiceName);
+  final shown = text
+      .replaceAll(legacySupportServiceName, supportServiceName)
+      .replaceAll('列表上的原價不會改變。', '')
+      .replaceAll(' The listed price stays the same.', '');
   return shown.isEmpty ? tr(context, '相片', 'Photo') : shown;
 }
 

@@ -242,6 +242,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   final Map<String, BookingStage> _stages = {};
+  final Map<String, (bool, bool)> _reviewNotes = {};
   final Set<String> _toldPickup = {};
   final Set<String> _toldDeposit = {};
   var _stagesReady = false;
@@ -282,121 +283,65 @@ class _HomeShellState extends State<HomeShell> {
     if (!mounted) return;
     final user = widget.user;
     final names = {user.label, user.name}.where((value) => value.trim().isNotEmpty).toSet();
-    Booking? reserved;
-    Booking? pickup;
-    var pickupAsOwner = false;
-    Booking? returnedNotice;
-    Booking? deposit;
-    Booking? reviewed;
+    final notices = <(String, String)>[];
     for (final booking in widget.store.bookings) {
       final item = widget.store.findItem(booking.itemId);
       final isOwner = item != null && names.contains(item.owner);
       final isBorrower = widget.store.isBorrower(booking, user.label, user.name);
-      if (!isOwner && !isBorrower) {
-        _stages[booking.id] = booking.stage;
-        continue;
-      }
       final previous = _stages[booking.id];
       final changed = _stagesReady && previous != null && previous != booking.stage;
-      if (changed && booking.stage == BookingStage.reserved) {
-        reserved = booking;
+      final itemName = item?.name ?? '';
+      final hadBorrowerReview = _reviewNotes[booking.id]?.$1 ?? false;
+      final hadOwnerReview = _reviewNotes[booking.id]?.$2 ?? false;
+      final hasBorrowerReview = (booking.comment ?? '').trim().isNotEmpty;
+      final hasOwnerReview = (booking.ownerReviewComment ?? '').trim().isNotEmpty;
+      // The person who just did the step already knows. Only the other person is told.
+      if (changed && isBorrower && !isOwner) {
+        if (booking.stage == BookingStage.reserved && _toldPickup.add('reserved-${booking.id}')) {
+          notices.add((
+            tr(context, '預約已同意', 'Booking accepted'),
+            tr(context, '「$itemName」的預約已同意。', 'The booking for “$itemName” was accepted.'),
+          ));
+        }
+        if (booking.stage == BookingStage.pickedUp && _toldPickup.add('pickup-${booking.id}')) {
+          notices.add((
+            tr(context, '已取件', 'Picked up'),
+            tr(context, '「$itemName」已取件。歸還時請向物主出示歸還碼。', '“$itemName” has been picked up. Show the return code when you bring it back.'),
+          ));
+        }
+        if (booking.stage == BookingStage.returned && _toldDeposit.add(booking.id)) {
+          final hasDeposit = booking.depositAmount > 0 || booking.deposit == DepositStatus.paid;
+          notices.add((
+            hasDeposit
+                ? tr(context, '按金將退回', 'Deposit will be returned')
+                : tr(context, '已歸還', 'Returned'),
+            hasDeposit
+                ? tr(context, '「$itemName」已歸還。按金將於 3 日內退回。', '“$itemName” is returned. The deposit will be returned within 3 days.')
+                : tr(context, '「$itemName」已確認歸還。', '“$itemName” has been returned.'),
+          ));
+        }
       }
-      if (changed &&
-          booking.stage == BookingStage.pickedUp &&
-          _toldPickup.add(booking.id)) {
-        pickup = booking;
-        pickupAsOwner = isOwner && !isBorrower;
+      if (_stagesReady && isOwner && !isBorrower && !hadBorrowerReview && hasBorrowerReview && _toldPickup.add('review-owner-${booking.id}')) {
+        notices.add((
+          tr(context, '評價已完成', 'Review finished'),
+          tr(context, '「$itemName」的評價步驟已完成。', 'The review step for “$itemName” is done.'),
+        ));
       }
-      if (changed && booking.stage == BookingStage.returned) {
-        returnedNotice = booking;
-      }
-      if (changed &&
-          booking.stage == BookingStage.returned &&
-          isBorrower &&
-          (booking.depositAmount > 0 || booking.deposit == DepositStatus.paid) &&
-          _toldDeposit.add(booking.id)) {
-        deposit = booking;
-      }
-      if (changed && booking.stage == BookingStage.reviewed) {
-        reviewed = booking;
+      if (_stagesReady && isBorrower && !isOwner && !hadOwnerReview && hasOwnerReview && _toldPickup.add('review-borrower-${booking.id}')) {
+        notices.add((
+          tr(context, '評價已完成', 'Review finished'),
+          tr(context, '「$itemName」的評價步驟已完成。', 'The review step for “$itemName” is done.'),
+        ));
       }
       _stages[booking.id] = booking.stage;
+      _reviewNotes[booking.id] = (hasBorrowerReview, hasOwnerReview);
     }
     if (!_stagesReady) {
       _stagesReady = true;
       return;
     }
-    if (reserved != null) {
-      final itemName = widget.store.findItem(reserved.itemId)?.name ?? '';
-      _popup(
-        tr(context, '預約已同意', 'Booking accepted'),
-        tr(context, '「$itemName」的預約已同意。', 'The booking for “$itemName” was accepted.'),
-      );
-    }
-    if (returnedNotice != null) {
-      final itemName = widget.store.findItem(returnedNotice.itemId)?.name ?? '';
-      _popup(
-        tr(context, '已歸還', 'Returned'),
-        tr(context, '「$itemName」已確認歸還。', '“$itemName” has been returned.'),
-      );
-    }
-    if (reviewed != null) {
-      final itemName = widget.store.findItem(reviewed.itemId)?.name ?? '';
-      _popup(
-        tr(context, '評價已完成', 'Review finished'),
-        tr(context, '「$itemName」的評價步驟已完成。', 'The review step for “$itemName” is done.'),
-      );
-    }
-    if (pickup != null) {
-      final itemName = widget.store.findItem(pickup.itemId)?.name ?? '';
-      final asOwner = pickupAsOwner;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        showDialog<void>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: Text(tr(dialogContext, '已取件', 'Picked up')),
-            content: Text(
-              asOwner
-                  ? tr(dialogContext, '「$itemName」已確認取件。', '“$itemName” has been picked up.')
-                  : tr(
-                      dialogContext,
-                      '「$itemName」已取件。歸還時請向物主出示歸還碼。',
-                      '“$itemName” has been picked up. Show the return code when you bring it back.',
-                    ),
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(tr(dialogContext, '知道了', 'OK')),
-              ),
-            ],
-          ),
-        );
-      });
-    }
-    if (deposit != null) {
-      final itemName = widget.store.findItem(deposit.itemId)?.name ?? '';
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        showDialog<void>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: Text(tr(dialogContext, '按金將退回', 'Deposit will be returned')),
-            content: Text(tr(
-              dialogContext,
-              '「$itemName」已歸還。按金將於 3 日內退回。',
-              '“$itemName” is returned. The deposit will be returned within 3 days.',
-            )),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(tr(dialogContext, '知道了', 'OK')),
-              ),
-            ],
-          ),
-        );
-      });
+    for (final notice in notices) {
+      _popup(notice.$1, notice.$2);
     }
   }
 

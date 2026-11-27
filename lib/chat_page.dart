@@ -77,11 +77,16 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _load() async {
     final messages = await widget.auth.messagesFor(widget.itemId);
+    if (!mounted) return;
     if (_support && !messages.any((message) => isSupportStaff(message.sender))) {
       await widget.auth.sendMessage(
         itemId: widget.itemId,
         sender: supportServiceName,
-        body: 'Hello, this is Customer service. Please tell us your problem: what you were trying to do, and what went wrong. We will read your message and help.',
+        body: tr(
+          context,
+          '你好，這裡是 Customer service。請告訴我們你的問題：你當時想做什麼，以及發生了什麼。我們會看你的訊息並協助。',
+          'Hello, this is Customer service. Please tell us your problem: what you were trying to do, and what went wrong. We will read your message and help.',
+        ),
       );
       return _load();
     }
@@ -126,11 +131,16 @@ class _ChatPageState extends State<ChatPage> {
       body: body,
       photo: photo,
     );
+    if (!mounted) return;
     if (_support && widget.senderName != supportServiceName) {
       await widget.auth.sendMessage(
         itemId: widget.itemId,
         sender: supportServiceName,
-        body: 'We have received your message. Someone from Customer service will contact you soon.',
+        body: tr(
+          context,
+          '我們已收到你的訊息。Customer service 會盡快有人聯絡你。',
+          'We have received your message. Someone from Customer service will contact you soon.',
+        ),
       );
     }
     await _load();
@@ -177,11 +187,17 @@ class _ChatPageState extends State<ChatPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
             child: Text(
-              tr(
-                context,
-                '關於「${widget.itemName}」。可以約好當面交接。',
-                'About “${widget.itemName}”. Agree a handover here.',
-              ),
+              _support
+                  ? tr(
+                      context,
+                      '請在下面說明你的問題。',
+                      'Describe your problem below.',
+                    )
+                  : tr(
+                      context,
+                      '關於「${widget.itemName}」。可以約好當面交接。',
+                      'About “${widget.itemName}”. Agree a handover here.',
+                    ),
               style: const TextStyle(color: Color(0xFF5E6A64)),
             ),
           ),
@@ -242,7 +258,7 @@ class _ChatPageState extends State<ChatPage> {
                     icon: const Icon(Icons.attach_file),
                     tooltip: tr(context, '傳送相片', 'Send a photo'),
                   ),
-                  if (widget.store != null)
+                  if (!_support && widget.store != null)
                     IconButton(
                       onPressed: () {
                         final catalog = widget.store!;
@@ -374,7 +390,9 @@ class _Bubble extends StatelessWidget {
                           .split('\n')
                           .where((line) => !line.startsWith('#offer '))
                           .join('\n')
-                          .replaceAll(legacySupportServiceName, supportServiceName),
+                          .replaceAll(legacySupportServiceName, supportServiceName)
+                          .replaceAll('列表上的原價不會改變。', '')
+                          .replaceAll(' The listed price stays the same.', ''),
                       style: TextStyle(color: mine ? Colors.white : const Color(0xFF1B2A24)),
                     ),
                 ],
@@ -519,8 +537,8 @@ class _Bubble extends StatelessWidget {
       body: accept
           ? [
               both(
-                '已同意新的租金和按金。請借用者到預約頁確認預約，物主仍須同意這次租借。列表上的原價不會改變。',
-                'The new rent and deposit are agreed. The borrower should open the booking page to confirm. The owner still needs to accept it. The listed price stays the same.',
+                '已同意新的租金和按金。請借用者到預約頁確認預約，物主仍須同意這次租借。',
+                'The new rent and deposit are agreed. The borrower should open the booking page to confirm. The owner still needs to accept it.',
               ),
               '#offer rent=$rentText deposit=${offer.$2}',
             ].join('\n')

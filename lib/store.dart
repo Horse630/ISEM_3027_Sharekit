@@ -435,36 +435,36 @@ class ShareStore extends ChangeNotifier {
     final item = _items[itemIndex];
     final isOwner = item.owner == reviewerLabel || item.owner == reviewerLogin;
     final borrower = isBorrower(booking, reviewerLabel, reviewerLogin);
-    if (isOwner && !borrower) {
-      if (booking.borrower.isEmpty ||
-          (booking.ownerReviewComment ?? '').trim().isNotEmpty)
-        return false;
+    if (borrower && (booking.comment ?? '').trim().isEmpty) {
+      final nextCount = item.reviewCount + 1;
+      final nextRating = ((item.rating * item.reviewCount) + stars) / nextCount;
+      _items[itemIndex] = item.copyWith(
+        rating: double.parse(nextRating.toStringAsFixed(1)),
+        reviewCount: nextCount,
+        handovers: item.handovers + 1,
+      );
       _update(
         bookingId,
         (current) => current.copyWith(
           stage: BookingStage.reviewed,
-          ownerReviewStars: stars,
-          ownerReviewComment: text,
-          ownerReviewAuthor: reviewerLabel,
+          stars: stars,
+          comment: text,
         ),
       );
       return true;
     }
-    if (!borrower || isOwner || (booking.comment ?? '').trim().isNotEmpty)
+    if (!isOwner ||
+        booking.borrower.isEmpty ||
+        (booking.ownerReviewComment ?? '').trim().isNotEmpty) {
       return false;
-    final nextCount = item.reviewCount + 1;
-    final nextRating = ((item.rating * item.reviewCount) + stars) / nextCount;
-    _items[itemIndex] = item.copyWith(
-      rating: double.parse(nextRating.toStringAsFixed(1)),
-      reviewCount: nextCount,
-      handovers: item.handovers + 1,
-    );
+    }
     _update(
       bookingId,
       (current) => current.copyWith(
         stage: BookingStage.reviewed,
-        stars: stars,
-        comment: text,
+        ownerReviewStars: stars,
+        ownerReviewComment: text,
+        ownerReviewAuthor: reviewerLabel,
       ),
     );
     return true;

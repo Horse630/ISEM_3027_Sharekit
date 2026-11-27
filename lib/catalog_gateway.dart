@@ -202,8 +202,14 @@ CatalogSnapshot mergeCatalogs(CatalogSnapshot remote, CatalogSnapshot local) {
   for (final item in local.items) {
     if (itemIds.add(item.id)) items.add(item);
   }
-  final bookings = [...remote.bookings];
-  final bookingIds = bookings.map((booking) => booking.id).toSet();
+  final bookings = <Booking>[];
+  final bookingIds = <String>{};
+  final localById = {for (final booking in local.bookings) booking.id: booking};
+  for (final booking in remote.bookings) {
+    final localBooking = localById[booking.id];
+    bookings.add(localBooking == null ? booking : _preferBooking(booking, localBooking));
+    bookingIds.add(booking.id);
+  }
   for (final booking in local.bookings) {
     if (bookingIds.add(booking.id)) bookings.add(booking);
   }
@@ -211,6 +217,62 @@ CatalogSnapshot mergeCatalogs(CatalogSnapshot remote, CatalogSnapshot local) {
     items: items,
     bookings: bookings,
     sequence: math.max(remote.sequence, local.sequence),
+  );
+}
+
+int _bookingRank(BookingStage stage) => switch (stage) {
+  BookingStage.requested => 1,
+  BookingStage.reserved => 2,
+  BookingStage.rejected => 3,
+  BookingStage.pickedUp => 4,
+  BookingStage.returned => 5,
+  BookingStage.reviewed => 6,
+};
+
+String? _keepText(String? primary, String? other) {
+  if ((primary ?? '').trim().isNotEmpty) return primary;
+  if ((other ?? '').trim().isNotEmpty) return other;
+  return primary;
+}
+
+Booking _preferBooking(Booking remote, Booking local) {
+  final remoteFurther = _bookingRank(remote.stage) >= _bookingRank(local.stage);
+  final primary = remoteFurther ? remote : local;
+  final other = remoteFurther ? local : remote;
+  final pickedUp =
+      remote.stage == BookingStage.pickedUp ||
+      local.stage == BookingStage.pickedUp ||
+      _bookingRank(remote.stage) >= _bookingRank(BookingStage.pickedUp) ||
+      _bookingRank(local.stage) >= _bookingRank(BookingStage.pickedUp);
+  final stage = !pickedUp &&
+          (remote.stage == BookingStage.rejected || local.stage == BookingStage.rejected)
+      ? BookingStage.rejected
+      : primary.stage;
+  return Booking(
+    id: primary.id,
+    itemId: primary.itemId,
+    start: primary.start,
+    end: primary.end,
+    stage: stage,
+    pickupCode: primary.pickupCode,
+    note: _keepText(primary.note, other.note) ?? '',
+    payMethod: primary.payMethod,
+    deposit: primary.deposit,
+    depositAmount: primary.depositAmount > 0 ? primary.depositAmount : other.depositAmount,
+    offeredPrice: primary.offeredPrice || other.offeredPrice,
+    offeredDaily: primary.offeredDaily ?? other.offeredDaily,
+    borrower: _keepText(primary.borrower, other.borrower) ?? '',
+    borrowerAccount: _keepText(primary.borrowerAccount, other.borrowerAccount) ?? '',
+    ownerReviewStars: primary.ownerReviewStars ?? other.ownerReviewStars,
+    ownerReviewComment: _keepText(primary.ownerReviewComment, other.ownerReviewComment),
+    ownerReviewAuthor: _keepText(primary.ownerReviewAuthor, other.ownerReviewAuthor),
+    returnCondition: _keepText(primary.returnCondition, other.returnCondition),
+    returnCode: primary.returnCode.isNotEmpty ? primary.returnCode : other.returnCode,
+    returnedAt: primary.returnedAt ?? other.returnedAt,
+    returnPhoto: primary.returnPhoto ?? other.returnPhoto,
+    stars: primary.stars ?? other.stars,
+    comment: _keepText(primary.comment, other.comment),
+    issue: _keepText(primary.issue, other.issue),
   );
 }
 
