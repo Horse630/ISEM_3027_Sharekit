@@ -308,6 +308,11 @@ class _ItemCard extends StatelessWidget {
                         fontSize: 16,
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      tr(context, '物主 ${item.owner}', 'Owner ${item.owner}'),
+                      style: const TextStyle(color: Color(0xFF5E6A64), fontSize: 13),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       '${districtLabel(context, item.district)} · ${distanceText(context, item.distanceMeters)} · ${conditionLabel(context, item.condition)}',

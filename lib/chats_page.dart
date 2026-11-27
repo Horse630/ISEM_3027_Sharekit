@@ -6,6 +6,15 @@ import 'chat_page.dart';
 import 'store.dart';
 import 'text.dart';
 
+String _preview(BuildContext context, ChatMessage message) {
+  if (message.body.isEmpty) return tr(context, '相片', 'Photo');
+  final text = message.body
+      .split('\n')
+      .where((line) => !line.startsWith('#offer '))
+      .join(' ');
+  return text.isEmpty ? tr(context, '相片', 'Photo') : text;
+}
+
 class ChatsPage extends StatelessWidget {
   const ChatsPage({
     super.key,
@@ -27,6 +36,10 @@ class ChatsPage extends StatelessWidget {
         listenable: center,
         builder: (context, _) {
           final threads = _threads();
+          final unread = threads.fold<int>(0, (sum, thread) => sum + thread.unread);
+          if (center.unread != unread) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => center.publishUnread(unread));
+          }
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
             children: [
@@ -48,8 +61,8 @@ class ChatsPage extends StatelessWidget {
                 Text(
                   tr(
                     context,
-                    '還沒有對話。打開一件物品，按「聯絡物主」。',
-                    'No chats yet. Open an item and tap Message.',
+                    '還沒有對話。只有你和物主聊過的才會出現在這裡。',
+                    'No chats yet. Only conversations between you and an owner are listed.',
                   ),
                 )
               else
@@ -75,14 +88,39 @@ class ChatsPage extends StatelessWidget {
     for (final message in center.messages) {
       grouped.putIfAbsent(message.itemId, () => []).add(message);
     }
-    final threads = [
-      for (final entry in grouped.entries)
-        _Thread(
+    final threads = <_Thread>[];
+    for (final entry in grouped.entries) {
+      final owner = store.findItem(entry.key)?.owner ?? '';
+      final iAmOwner = owner == user.label || owner == user.name;
+      final clients = <String>{
+        for (final message in entry.value)
+          if (message.sender.isNotEmpty && message.sender != owner) message.sender,
+      };
+      if (iAmOwner) {
+        for (final client in clients) {
+          final messages = conversationOf(messages: entry.value, owner: owner, client: client);
+          if (messages.isEmpty) continue;
+          threads.add(_Thread(
+            itemId: entry.key,
+            client: client,
+            asOwner: true,
+            messages: messages,
+            unread: center.unreadForThread(entry.key, client, messages),
+          ));
+        }
+      } else if (clients.contains(user.label) || clients.contains(user.name)) {
+        final client = clients.contains(user.label) ? user.label : user.name;
+        final messages = conversationOf(messages: entry.value, owner: owner, client: client);
+        if (messages.isEmpty) continue;
+        threads.add(_Thread(
           itemId: entry.key,
-          messages: entry.value,
-          unread: center.unreadFor(entry.key),
-        ),
-    ];
+          client: client,
+          asOwner: false,
+          messages: messages,
+          unread: center.unreadForThread(entry.key, client, messages),
+        ));
+      }
+    }
     threads.sort((a, b) => b.latest.id.compareTo(a.latest.id));
     return threads;
   }
@@ -91,11 +129,15 @@ class ChatsPage extends StatelessWidget {
 class _Thread {
   _Thread({
     required this.itemId,
+    required this.client,
+    required this.asOwner,
     required this.messages,
     required this.unread,
   });
 
   final String itemId;
+  final String client;
+  final bool asOwner;
   final List<ChatMessage> messages;
   final int unread;
 
@@ -120,24 +162,31 @@ class _ThreadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final item = store.findItem(thread.itemId);
-    final title = item?.name ?? tr(context, '已下架的物品', 'Removed item');
     final owner = item?.owner ?? '';
+    final title = thread.asOwner
+        ? thread.client
+        : (item?.name ?? tr(context, '已下架的物品', 'Removed item'));
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: () async {
-          await center.markItem(thread.itemId);
+          await center.markThread(
+            thread.itemId,
+            thread.client,
+            ids: thread.messages.map((message) => message.id),
+          );
           if (!context.mounted) return;
           await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => ChatPage(
                 auth: auth,
                 itemId: thread.itemId,
-                itemName: title,
+                itemName: item?.name ?? title,
                 ownerName: owner,
                 senderName: user.label,
+                clientName: thread.client,
                 center: center,
                 store: store,
               ),
@@ -167,7 +216,7 @@ class _ThreadTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${thread.latest.sender}：${thread.latest.body.isEmpty ? tr(context, '相片', 'Photo') : thread.latest.body}',
+                      '${thread.latest.sender}：${_preview(context, thread.latest)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Color(0xFF5E6A64)),

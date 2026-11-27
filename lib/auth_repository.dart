@@ -111,7 +111,7 @@ class AuthRepository {
         p.join(await getDatabasesPath(), 'sharekit.db');
     _db = await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -231,6 +231,15 @@ class AuthRepository {
             await db.execute(
               'ALTER TABLE bookings ADD COLUMN deposit_amount REAL NOT NULL DEFAULT 0',
             );
+          }
+        }
+        if (oldVersion < 13) {
+          final bookingColumns = await db.rawQuery('PRAGMA table_info(bookings)');
+          if (!bookingColumns.any((row) => row['name'] == 'offered_price')) {
+            await db.execute('ALTER TABLE bookings ADD COLUMN offered_price INTEGER NOT NULL DEFAULT 0');
+          }
+          if (!bookingColumns.any((row) => row['name'] == 'offered_daily')) {
+            await db.execute('ALTER TABLE bookings ADD COLUMN offered_daily REAL');
           }
         }
         if (oldVersion < 12) {
@@ -589,6 +598,8 @@ class AuthRepository {
         note TEXT NOT NULL,
         deposit TEXT NOT NULL,
         deposit_amount REAL NOT NULL DEFAULT 0,
+        offered_price INTEGER NOT NULL DEFAULT 0,
+        offered_daily REAL,
         borrower TEXT NOT NULL DEFAULT '',
         borrower_account TEXT NOT NULL DEFAULT '',
         owner_review_stars INTEGER,

@@ -242,6 +242,8 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   final Map<String, BookingStage> _stages = {};
+  final Set<String> _toldPickup = {};
+  final Set<String> _toldDeposit = {};
   var _stagesReady = false;
 
   @override
@@ -279,20 +281,33 @@ class _HomeShellState extends State<HomeShell> {
   void _notePickups() {
     if (!mounted) return;
     final user = widget.user;
-    Booking? noticed;
-    var ownerSide = false;
+    final names = {user.label, user.name}.where((value) => value.trim().isNotEmpty).toSet();
+    Booking? pickup;
+    var pickupAsOwner = false;
+    Booking? deposit;
     for (final booking in widget.store.bookings) {
       final item = widget.store.findItem(booking.itemId);
-      final owner = item != null && (item.owner == user.label || item.owner == user.name);
-      final borrower = widget.store.isBorrower(booking, user.label, user.name);
+      final isOwner = item != null && names.contains(item.owner);
+      final isBorrower = widget.store.isBorrower(booking, user.label, user.name);
+      if (!isOwner && !isBorrower) {
+        _stages[booking.id] = booking.stage;
+        continue;
+      }
       final previous = _stages[booking.id];
-      if (_stagesReady &&
-          (owner || borrower) &&
-          previous != null &&
-          previous != BookingStage.pickedUp &&
-          booking.stage == BookingStage.pickedUp) {
-        noticed = booking;
-        ownerSide = owner && !borrower;
+      final changed = _stagesReady && previous != null && previous != booking.stage;
+      if (changed &&
+          booking.stage == BookingStage.pickedUp &&
+          _toldPickup.add(booking.id)) {
+        pickup = booking;
+        pickupAsOwner = isOwner && !isBorrower;
+      }
+      if (changed &&
+          (booking.stage == BookingStage.returned ||
+              booking.stage == BookingStage.reviewed) &&
+          isBorrower &&
+          (booking.depositAmount > 0 || booking.deposit == DepositStatus.paid) &&
+          _toldDeposit.add(booking.id)) {
+        deposit = booking;
       }
       _stages[booking.id] = booking.stage;
     }
@@ -300,34 +315,57 @@ class _HomeShellState extends State<HomeShell> {
       _stagesReady = true;
       return;
     }
-    final booking = noticed;
-    if (booking == null) return;
-    final itemName = widget.store.findItem(booking.itemId)?.name ?? '';
-    final asOwner = ownerSide;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(tr(dialogContext, '已取件', 'Picked up')),
-          content: Text(
-            asOwner
-                ? tr(dialogContext, '「$itemName」已確認取件。', '“$itemName” has been picked up.')
-                : tr(
-                    dialogContext,
-                    '「$itemName」已取件。歸還時請向物主出示歸還碼。',
-                    '“$itemName” has been picked up. Show the return code when you bring it back.',
-                  ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(tr(dialogContext, '知道了', 'OK')),
+    if (pickup != null) {
+      final itemName = widget.store.findItem(pickup.itemId)?.name ?? '';
+      final asOwner = pickupAsOwner;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(tr(dialogContext, '已取件', 'Picked up')),
+            content: Text(
+              asOwner
+                  ? tr(dialogContext, '「$itemName」已確認取件。', '“$itemName” has been picked up.')
+                  : tr(
+                      dialogContext,
+                      '「$itemName」已取件。歸還時請向物主出示歸還碼。',
+                      '“$itemName” has been picked up. Show the return code when you bring it back.',
+                    ),
             ),
-          ],
-        ),
-      );
-    });
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(tr(dialogContext, '知道了', 'OK')),
+              ),
+            ],
+          ),
+        );
+      });
+    }
+    if (deposit != null) {
+      final itemName = widget.store.findItem(deposit.itemId)?.name ?? '';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(tr(dialogContext, '按金將退回', 'Deposit will be returned')),
+            content: Text(tr(
+              dialogContext,
+              '「$itemName」已歸還。按金將於 3 日內退回。',
+              '“$itemName” is returned. The deposit will be returned within 3 days.',
+            )),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(tr(dialogContext, '知道了', 'OK')),
+              ),
+            ],
+          ),
+        );
+      });
+    }
   }
 
   @override

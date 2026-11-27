@@ -365,9 +365,18 @@ class _Meta extends StatelessWidget {
 }
 
 class BookPage extends StatefulWidget {
-  const BookPage({super.key, required this.itemId});
+  const BookPage({
+    super.key,
+    required this.itemId,
+    this.useAgreed = false,
+    this.agreedDaily,
+    this.agreedDeposit = 0,
+  });
 
   final String itemId;
+  final bool useAgreed;
+  final double? agreedDaily;
+  final double agreedDeposit;
 
   @override
   State<BookPage> createState() => _BookPageState();
@@ -446,6 +455,9 @@ class _BookPageState extends State<BookPage> {
       borrower: user.label,
       borrowerAccount: user.name,
       payMethod: _pay,
+      useAgreed: widget.useAgreed,
+      agreedDaily: widget.agreedDaily,
+      agreedDeposit: widget.agreedDeposit,
     );
     if (booking == null) {
       setState(() => _error = tr(
@@ -457,9 +469,13 @@ class _BookPageState extends State<BookPage> {
     }
     final note = _note.text.trim();
     final payLabel = '${_pay.label} / ${_pay.en}';
-    final rent = item.isFree
-        ? '免費 / Free'
-        : money(quoteFor(item, booking.start, booking.end).rent);
+    final rentQuote = quoteFor(item, booking.start, booking.end);
+    final agreedRent = widget.useAgreed
+        ? (widget.agreedDaily ?? 0) * booking.days
+        : rentQuote.rent;
+    final rent = widget.useAgreed
+        ? (agreedRent == 0 ? '免費 / Free' : money(agreedRent))
+        : (item.isFree ? '免費 / Free' : money(rentQuote.rent));
     final lines = [
       both('租借申請', 'Rental request'),
       '物品 / Item：${item.name}',
@@ -467,7 +483,7 @@ class _BookPageState extends State<BookPage> {
       '日期 / Dates：${formatDate(booking.start)} – ${formatDate(booking.end)}',
       '付款 / Payment：$payLabel',
       '租金 / Rent：$rent',
-      '按金 / Deposit：${item.depositAmount > 0 ? money(item.depositAmount) : '無 / None'}',
+      '按金 / Deposit：${(widget.useAgreed ? widget.agreedDeposit : item.depositAmount) > 0 ? money(widget.useAgreed ? widget.agreedDeposit : item.depositAmount) : '無 / None'}',
       if (note.isNotEmpty) '備註 / Note：$note',
     ];
     await account.auth.sendMessage(
@@ -499,6 +515,9 @@ class _BookPageState extends State<BookPage> {
   Widget build(BuildContext context) {
     final item = ShareKitScope.of(context).itemById(widget.itemId);
     final quote = quoteFor(item, _start, _end);
+    final agreedRent = widget.useAgreed ? (widget.agreedDaily ?? 0) * quote.days : quote.rent;
+    final agreedFree = widget.useAgreed ? agreedRent == 0 : quote.free;
+    final depositFee = widget.useAgreed ? widget.agreedDeposit : item.depositAmount;
     return Scaffold(
       appBar: AppBar(title: Text(tr(context, '預約', 'Book'))),
       body: ListView(
@@ -566,18 +585,32 @@ class _BookPageState extends State<BookPage> {
           Text(tr(context, '費用', 'Cost'), style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           _FeeRow(label: tr(context, '日數', 'Days'), value: '${quote.days}'),
-          _FeeRow(
-            label: tr(context, '租金', 'Rent'),
-            value: quote.free
-                ? tr(context, '免費', 'Free')
-                : _pay == PayMethod.face
-                    ? '${money(quote.rent)} · ${tr(context, '當面交', 'Pay in person')}'
-                    : money(quote.rent),
-          ),
-          _FeeRow(
-            label: tr(context, '按金（平台暫存）', 'Deposit (held by platform)'),
-            value: item.depositAmount > 0 ? money(item.depositAmount) : tr(context, '無', 'None'),
-          ),
+          if (widget.useAgreed)
+            _AgreedFee(
+              label: tr(context, '租金', 'Rent'),
+              previous: quote.free ? tr(context, '免費', 'Free') : money(quote.rent),
+              next: agreedFree ? tr(context, '免費', 'Free') : money(agreedRent),
+            )
+          else
+            _FeeRow(
+              label: tr(context, '租金', 'Rent'),
+              value: quote.free
+                  ? tr(context, '免費', 'Free')
+                  : _pay == PayMethod.face
+                      ? '${money(quote.rent)} · ${tr(context, '當面交', 'Pay in person')}'
+                      : money(quote.rent),
+            ),
+          if (widget.useAgreed)
+            _AgreedFee(
+              label: tr(context, '按金（平台暫存）', 'Deposit (held by platform)'),
+              previous: item.depositAmount > 0 ? money(item.depositAmount) : tr(context, '無', 'None'),
+              next: depositFee > 0 ? money(depositFee) : tr(context, '無', 'None'),
+            )
+          else
+            _FeeRow(
+              label: tr(context, '按金（平台暫存）', 'Deposit (held by platform)'),
+              value: item.depositAmount > 0 ? money(item.depositAmount) : tr(context, '無', 'None'),
+            ),
           _FeeRow(
             label: tr(context, '平台費', 'Platform fee'),
             value: 'HK\$0',
@@ -586,11 +619,11 @@ class _BookPageState extends State<BookPage> {
           _FeeRow(
             label: tr(context, '今次要付', 'Pay now'),
             value: money(
-              (_pay == PayMethod.online && !quote.free ? quote.rent : 0) + item.depositAmount,
+              (_pay == PayMethod.online && !agreedFree ? agreedRent : 0) + depositFee,
             ),
             strong: true,
           ),
-          if (item.depositAmount > 0)
+          if (depositFee > 0)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
@@ -650,6 +683,44 @@ class _DateButton extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AgreedFee extends StatelessWidget {
+  const _AgreedFee({
+    required this.label,
+    required this.previous,
+    required this.next,
+  });
+
+  final String label;
+  final String previous;
+  final String next;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: Text(label)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                previous,
+                style: const TextStyle(
+                  decoration: TextDecoration.lineThrough,
+                  color: Color(0xFF8A918C),
+                ),
+              ),
+              Text(next, style: const TextStyle(color: Color(0xFFB42318), fontWeight: FontWeight.w800)),
+            ],
+          ),
+        ],
       ),
     );
   }

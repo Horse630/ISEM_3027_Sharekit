@@ -126,8 +126,7 @@ class ShareStore extends ChangeNotifier {
       return true;
     }
     final item = findItem(booking.itemId);
-    if (item != null && names.contains(item.owner)) return true;
-    return booking.borrower.isEmpty;
+    return item != null && names.contains(item.owner);
   }
 
   bool isBorrower(Booking booking, String label, String login) =>
@@ -252,6 +251,9 @@ class ShareStore extends ChangeNotifier {
     required String borrower,
     String borrowerAccount = '',
     required PayMethod payMethod,
+    bool useAgreed = false,
+    double? agreedDaily,
+    double agreedDeposit = 0,
   }) {
     final from = dateOnly(start);
     final to = dateOnly(end);
@@ -260,8 +262,11 @@ class ShareStore extends ChangeNotifier {
     if (item == null) return null;
     if (borrower == item.owner) return null;
     _sequence += 1;
-    final holdsDeposit = item.depositAmount > 0;
-    final rentOnline = payMethod == PayMethod.online && !item.isFree;
+    final daily = useAgreed ? agreedDaily : item.dailyPrice;
+    final depositFee = useAgreed ? agreedDeposit : item.depositAmount;
+    final free = daily == null || daily == 0;
+    final holdsDeposit = depositFee > 0;
+    final rentOnline = payMethod == PayMethod.online && !free;
     final booking = Booking(
       id: 'SK-$_sequence',
       itemId: itemId,
@@ -274,7 +279,9 @@ class ShareStore extends ChangeNotifier {
       deposit: holdsDeposit || rentOnline
           ? DepositStatus.pending
           : DepositStatus.none,
-      depositAmount: item.depositAmount,
+      depositAmount: depositFee,
+      offeredPrice: useAgreed,
+      offeredDaily: useAgreed ? daily : null,
       borrower: borrower,
       borrowerAccount: borrowerAccount,
     );
@@ -309,6 +316,9 @@ class ShareStore extends ChangeNotifier {
       return false;
     }
     if (booking.depositAmount > 0) return true;
+    if (booking.offeredPrice) {
+      return booking.payMethod == PayMethod.online && (booking.offeredDaily ?? 0) > 0;
+    }
     final item = findItem(booking.itemId);
     if (item == null || item.isFree) return false;
     return booking.payMethod == PayMethod.online;
@@ -401,6 +411,7 @@ class ShareStore extends ChangeNotifier {
       _update(
         bookingId,
         (current) => current.copyWith(
+          stage: BookingStage.reviewed,
           ownerReviewStars: stars,
           ownerReviewComment: text,
           ownerReviewAuthor: reviewerLabel,
@@ -426,39 +437,6 @@ class ShareStore extends ChangeNotifier {
       ),
     );
     return true;
-  }
-
-  void applyOffer({
-    required String itemId,
-    required double? dailyPrice,
-    required double depositAmount,
-  }) {
-    final index = _items.indexWhere((item) => item.id == itemId);
-    if (index == -1) return;
-    final item = _items[index];
-    _items[index] = ShareItem(
-      id: item.id,
-      name: item.name,
-      owner: item.owner,
-      category: item.category,
-      condition: item.condition,
-      distanceMeters: item.distanceMeters,
-      summary: item.summary,
-      rating: item.rating,
-      reviewCount: item.reviewCount,
-      handovers: item.handovers,
-      dailyPrice: dailyPrice,
-      depositAmount: depositAmount,
-      lengthCm: item.lengthCm,
-      widthCm: item.widthCm,
-      heightCm: item.heightCm,
-      photoBytes: item.photoBytes,
-      address: item.address,
-      district: item.district,
-      handover: item.handover,
-    );
-    notifyListeners();
-    _persist();
   }
 
   void addItem({

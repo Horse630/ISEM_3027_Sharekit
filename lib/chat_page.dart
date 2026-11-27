@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'auth_repository.dart';
 import 'booking_pages.dart';
+import 'item_pages.dart';
 import 'catalog_gateway.dart';
 import 'chat_center.dart';
 import 'main.dart';
@@ -22,6 +23,7 @@ class ChatPage extends StatefulWidget {
     required this.itemName,
     required this.ownerName,
     required this.senderName,
+    this.clientName,
     this.center,
     this.store,
   });
@@ -31,6 +33,7 @@ class ChatPage extends StatefulWidget {
   final String itemName;
   final String ownerName;
   final String senderName;
+  final String? clientName;
   final ChatCenter? center;
   final ShareStore? store;
 
@@ -61,12 +64,21 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _load() async {
     final messages = await widget.auth.messagesFor(widget.itemId);
+    final mine = conversationOf(
+      messages: messages,
+      owner: widget.ownerName,
+      client: widget.clientName ?? widget.senderName,
+    );
     if (!mounted) return;
     setState(() {
-      _messages = messages;
+      _messages = mine;
       _loading = false;
     });
-    await widget.center?.markItem(widget.itemId);
+    await widget.center?.markThread(
+      widget.itemId,
+      widget.clientName ?? widget.senderName,
+      ids: mine.map((message) => message.id),
+    );
   }
 
   Future<void> _pickPhoto() async {
@@ -316,6 +328,25 @@ class _Bubble extends StatelessWidget {
 
   Widget? _actions(BuildContext context) {
     final catalog = store;
+    if (catalog != null && message.kind == 'offer-book' && !isOwner) {
+      final offer = _readOffer(message.body);
+      return FilledButton(
+        style: _chatButton(filled: true),
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => BookPage(
+                itemId: message.itemId,
+                useAgreed: true,
+                agreedDaily: offer?.$1,
+                agreedDeposit: offer?.$2 ?? 0,
+              ),
+            ),
+          );
+        },
+        child: Text(tr(context, '前往確認預約', 'Confirm booking')),
+      );
+    }
     if (catalog != null && message.kind == 'offer' && !mine && _offerOpen()) {
       final offer = _readOffer(message.body);
       return Wrap(
@@ -402,7 +433,9 @@ class _Bubble extends StatelessWidget {
   bool _offerOpen() {
     final key = message.id.toString();
     return !thread.any(
-      (item) => (item.kind == 'offer-yes' || item.kind == 'offer-no') && item.bookingId == key,
+      (item) =>
+          (item.kind == 'offer-yes' || item.kind == 'offer-no' || item.kind == 'offer-book') &&
+          item.bookingId == key,
     );
   }
 
@@ -412,27 +445,25 @@ class _Bubble extends StatelessWidget {
     required bool accept,
     required (double?, double) offer,
   }) async {
-    if (accept) {
-      catalog.applyOffer(
-        itemId: message.itemId,
-        dailyPrice: offer.$1,
-        depositAmount: offer.$2,
-      );
-    }
     final user = AccountScope.of(context).user;
     final owner = catalog.findItem(message.itemId)?.owner ?? '';
     final fromOwner = user.label == owner || user.name == owner;
+    final rentText = offer.$1 == null ? '' : offer.$1.toString();
     await auth.sendMessage(
       itemId: message.itemId,
       sender: user.label,
       body: accept
-          ? (fromOwner
-              ? both('物主已同意新的租金和按金。', 'The owner accepted the new rent and deposit.')
-              : both('借用者已同意新的租金和按金。', 'The borrower accepted the new rent and deposit.'))
+          ? [
+              both(
+                '已同意新的租金和按金。請借用者到預約頁確認預約，物主仍須同意這次租借。列表上的原價不會改變。',
+                'The new rent and deposit are agreed. The borrower should open the booking page to confirm. The owner still needs to accept it. The listed price stays the same.',
+              ),
+              '#offer rent=$rentText deposit=${offer.$2}',
+            ].join('\n')
           : (fromOwner
               ? both('物主已拒絕這次提議。', 'The owner declined this offer.')
               : both('借用者已拒絕這次提議。', 'The borrower declined this offer.')),
-      kind: accept ? 'offer-yes' : 'offer-no',
+      kind: accept ? 'offer-book' : 'offer-no',
       bookingId: message.id.toString(),
     );
     await onChanged();
@@ -505,6 +536,21 @@ class _Bubble extends StatelessWidget {
     );
     await onChanged();
   }
+}
+
+List<ChatMessage> conversationOf({
+  required List<ChatMessage> messages,
+  required String owner,
+  required String client,
+}) {
+  final sorted = [...messages]..sort((a, b) => a.id.compareTo(b.id));
+  String? current;
+  final kept = <ChatMessage>[];
+  for (final message in sorted) {
+    if (message.sender != owner) current = message.sender;
+    if (current == client) kept.add(message);
+  }
+  return kept;
 }
 
 (double?, double)? _readOffer(String body) {

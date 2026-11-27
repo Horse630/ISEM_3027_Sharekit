@@ -53,18 +53,23 @@ class ChatCenter extends ChangeNotifier {
     try {
       _reads = await _loadReads();
       messages = await auth.allMessages();
-      unread = _count();
       notifyListeners();
     } catch (_) {}
   }
 
-  Future<void> markItem(String itemId) async {
-    var latest = _reads[itemId] ?? 0;
-    for (final message in messages) {
-      if (message.itemId == itemId && message.id > latest) latest = message.id;
+  static String threadKey(String itemId, String client) => '$itemId::$client';
+
+  Future<void> markItem(String itemId) => markThread(itemId, '');
+
+  Future<void> markThread(String itemId, String client, {Iterable<int>? ids}) async {
+    final key = threadKey(itemId, client);
+    var latest = _reads[key] ?? 0;
+    final source = ids ??
+        messages.where((message) => message.itemId == itemId).map((message) => message.id);
+    for (final id in source) {
+      if (id > latest) latest = id;
     }
-    _reads[itemId] = latest;
-    unread = _count();
+    _reads[key] = latest;
     notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -72,26 +77,19 @@ class ChatCenter extends ChangeNotifier {
     } catch (_) {}
   }
 
-  int unreadFor(String itemId) {
-    final seen = _reads[itemId] ?? 0;
+  int unreadForThread(String itemId, String client, Iterable<ChatMessage> thread) {
+    final seen = _reads[threadKey(itemId, client)] ?? 0;
     var count = 0;
-    for (final message in messages) {
-      if (message.itemId == itemId &&
-          message.sender != me &&
-          message.id > seen) {
-        count += 1;
-      }
+    for (final message in thread) {
+      if (message.sender != me && message.id > seen) count += 1;
     }
     return count;
   }
 
-  int _count() {
-    final items = messages.map((message) => message.itemId).toSet();
-    var total = 0;
-    for (final itemId in items) {
-      total += unreadFor(itemId);
-    }
-    return total;
+  void publishUnread(int value) {
+    if (unread == value) return;
+    unread = value;
+    notifyListeners();
   }
 
   Future<Map<String, int>> _loadReads() async {

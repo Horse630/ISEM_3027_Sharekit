@@ -337,6 +337,8 @@ class Booking {
     this.payMethod = PayMethod.online,
     this.deposit = DepositStatus.none,
     this.depositAmount = 0,
+    this.offeredPrice = false,
+    this.offeredDaily,
     this.borrower = '',
     this.borrowerAccount = '',
     this.ownerReviewStars,
@@ -361,6 +363,8 @@ class Booking {
   final PayMethod payMethod;
   final DepositStatus deposit;
   final double depositAmount;
+  final bool offeredPrice;
+  final double? offeredDaily;
   final String borrower;
   final String borrowerAccount;
   final int? ownerReviewStars;
@@ -404,6 +408,8 @@ class Booking {
       payMethod: payMethod ?? this.payMethod,
       deposit: deposit ?? this.deposit,
       depositAmount: depositAmount,
+      offeredPrice: offeredPrice,
+      offeredDaily: offeredDaily ?? this.offeredDaily,
       borrower: borrower ?? this.borrower,
       borrowerAccount: borrowerAccount ?? this.borrowerAccount,
       ownerReviewStars: ownerReviewStars ?? this.ownerReviewStars,

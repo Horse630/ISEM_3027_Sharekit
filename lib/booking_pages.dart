@@ -249,20 +249,6 @@ class BookingDetailPage extends StatelessWidget {
             onPressed: () => _reportIssue(context, booking.id),
             child: Text(tr(context, '回報問題', 'Report a problem')),
           ),
-          if (booking.deposit == DepositStatus.paid &&
-              (booking.stage == BookingStage.returned ||
-                  booking.stage == BookingStage.reviewed)) ...[
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () {
-                store.refundDeposit(booking.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(tr(context, '付款服務已確認退款。', 'The refund is marked.'))),
-                );
-              },
-              child: Text(tr(context, '確認退款', 'Confirm refund')),
-            ),
-          ],
         ],
       ),
       bottomNavigationBar: _ActionBar(
@@ -787,6 +773,51 @@ Future<void> _reportIssue(BuildContext context, String bookingId) async {
   detail.dispose();
   if (text == null || !context.mounted) return;
   ShareKitScope.of(context).reportIssue(bookingId, text);
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(tr(dialogContext, '已送出回報', 'Report sent')),
+      content: Text(tr(
+        dialogContext,
+        '我們會盡快有專人聯絡你。',
+        'Someone will contact you soon.',
+      )),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(tr(dialogContext, '知道了', 'OK')),
+        ),
+      ],
+    ),
+  );
+}
+
+class _StruckNext extends StatelessWidget {
+  const _StruckNext({required this.previous, required this.next});
+
+  final String previous;
+  final String next;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            previous,
+            style: const TextStyle(
+              decoration: TextDecoration.lineThrough,
+              color: Color(0xFF8A918C),
+            ),
+          ),
+          Text(next, style: const TextStyle(color: Color(0xFFB42318), fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
 }
 
 class DepositPage extends StatelessWidget {
@@ -806,6 +837,8 @@ class DepositPage extends StatelessWidget {
       );
     }
     final quote = quoteFor(item, booking.start, booking.end);
+    final rent = booking.offeredPrice ? (booking.offeredDaily ?? 0) * booking.days : quote.rent;
+    final free = booking.offeredPrice ? rent == 0 : quote.free;
     return Scaffold(
       appBar: AppBar(title: Text(tr(context, '付款', 'Payment'))),
       body: ListView(
@@ -828,18 +861,36 @@ class DepositPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          if (!quote.free && booking.payMethod == PayMethod.online)
-            Text(tr(context, '租金 ${money(quote.rent)}', 'Rent ${money(quote.rent)}')),
-          if (booking.depositAmount > 0)
-            Text(tr(
-              context,
-              '按金 ${money(booking.depositAmount)}（平台暫存）',
-              'Deposit ${money(booking.depositAmount)} (held by the platform)',
-            )),
+          if (!free && booking.payMethod == PayMethod.online)
+            booking.offeredPrice
+                ? _StruckNext(
+                    previous: tr(context, '租金 ${money(quote.rent)}', 'Rent ${money(quote.rent)}'),
+                    next: tr(context, '租金 ${money(rent)}', 'Rent ${money(rent)}'),
+                  )
+                : Text(tr(context, '租金 ${money(quote.rent)}', 'Rent ${money(quote.rent)}')),
+          if (booking.depositAmount > 0 || (booking.offeredPrice && item.depositAmount > 0))
+            booking.offeredPrice
+                ? _StruckNext(
+                    previous: tr(
+                      context,
+                      '按金 ${item.depositAmount > 0 ? money(item.depositAmount) : '無'}',
+                      'Deposit ${item.depositAmount > 0 ? money(item.depositAmount) : 'none'}',
+                    ),
+                    next: tr(
+                      context,
+                      '按金 ${money(booking.depositAmount)}（平台暫存）',
+                      'Deposit ${money(booking.depositAmount)} (held by the platform)',
+                    ),
+                  )
+                : Text(tr(
+                    context,
+                    '按金 ${money(booking.depositAmount)}（平台暫存）',
+                    'Deposit ${money(booking.depositAmount)} (held by the platform)',
+                  )),
           const SizedBox(height: 8),
           Text(
             money(
-              (booking.payMethod == PayMethod.online && !quote.free ? quote.rent : 0) +
+              (booking.payMethod == PayMethod.online && !free ? rent : 0) +
                   booking.depositAmount,
             ),
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
@@ -853,7 +904,7 @@ class DepositPage extends StatelessWidget {
                 itemId: latest.itemId,
                 sender: latest.borrower,
                 body: [
-                  if (latest.payMethod == PayMethod.online && !quote.free)
+                  if (latest.payMethod == PayMethod.online && !free)
                     both('租金已付。', 'The rent is paid.'),
                   if (latest.depositAmount > 0)
                     both(
