@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'catalog_gateway.dart';
 
 import 'auth_repository.dart';
+import 'chat_page.dart';
 import 'hkid_page.dart';
 import 'camera_capture.dart';
 import 'models.dart';
@@ -163,6 +164,13 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
+  Future<void> _uploadPhoto() async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+    final bytes = picked?.files.single.bytes;
+    if (!mounted || bytes == null) return;
+    setState(() => _photo = shrinkPhotoBytes(bytes) ?? bytes);
+  }
+
   Future<void> _takePhoto() async {
     final bytes = await Navigator.of(context).push<Uint8List>(
       MaterialPageRoute(
@@ -289,6 +297,22 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  void _contactUs() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          auth: widget.auth,
+          itemId: supportItemId(widget.user.name),
+          itemName: supportServiceName,
+          ownerName: supportServiceName,
+          senderName: widget.user.label,
+          clientName: widget.user.label,
+          store: widget.store,
+        ),
+      ),
+    );
+  }
+
   void _showDeposits() {
     final user = widget.user;
     final rows = widget.store.bookings.where((booking) {
@@ -352,6 +376,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       photo: _photo,
                       busy: _busy,
                       onPhoto: _takePhoto,
+                      onUpload: _uploadPhoto,
                     ),
                     const SizedBox(height: 12),
                     Text(tr(context, '物主給我的評價', 'Reviews from owners'), style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -374,6 +399,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         _Shortcut(label: tr(context, '我的上架', 'My listings'), icon: Icons.inventory_2_outlined, onTap: widget.store.showMyListings),
                         _Shortcut(label: tr(context, '借用紀錄', 'Borrowing history'), icon: Icons.event_note_outlined, onTap: () => widget.store.openTab(2)),
                         _Shortcut(label: tr(context, '按金狀態', 'Deposit status'), icon: Icons.account_balance_wallet_outlined, onTap: _showDeposits),
+                        _Shortcut(label: tr(context, '聯絡我們', 'Contact us'), icon: Icons.support_agent, onTap: _contactUs),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -492,6 +518,7 @@ class _AccountCard extends StatelessWidget {
     required this.photo,
     required this.busy,
     required this.onPhoto,
+    required this.onUpload,
   });
 
   final String name;
@@ -502,6 +529,7 @@ class _AccountCard extends StatelessWidget {
   final Uint8List? photo;
   final bool busy;
   final VoidCallback onPhoto;
+  final VoidCallback onUpload;
 
   @override
   Widget build(BuildContext context) {
@@ -538,9 +566,19 @@ class _AccountCard extends StatelessWidget {
                   style: const TextStyle(color: Color(0xFF5A6A80), fontSize: 13),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed: busy ? null : onPhoto,
-                  child: Text(tr(context, '拍攝個人相片', 'Take a profile photo')),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton(
+                      onPressed: busy ? null : onPhoto,
+                      child: Text(tr(context, '拍攝個人相片', 'Take a profile photo')),
+                    ),
+                    OutlinedButton(
+                      onPressed: busy ? null : onUpload,
+                      child: Text(tr(context, '上載相片', 'Upload a photo')),
+                    ),
+                  ],
                 ),
               ],
             ),

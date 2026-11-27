@@ -16,8 +16,9 @@ class ExplorePage extends StatefulWidget {
 
 class _ExplorePageState extends State<ExplorePage> {
   final _query = TextEditingController();
-  ItemCategory? _category;
-  ItemSort _sort = ItemSort.nearest;
+  final Set<ItemCategory> _categories = {};
+  SortField _field = SortField.nearest;
+  SortDir _direction = SortDir.lowToHigh;
   bool _freeOnly = false;
   bool _mineOnly = false;
   ShareStore? _store;
@@ -53,11 +54,12 @@ class _ExplorePageState extends State<ExplorePage> {
     final user = AccountScope.of(context).user;
     final results = store.search(
       query: _query.text,
-      category: _category,
+      categories: _categories,
       freeOnly: _freeOnly,
       district: null,
       owner: _mineOnly ? user.label : null,
-      sort: _sort,
+      field: _field,
+      direction: _direction,
     );
     final place = tr(context, '香港浸會大學', 'HKBU Campus');
 
@@ -119,17 +121,19 @@ class _ExplorePageState extends State<ExplorePage> {
                   children: [
                     _FilterChip(
                       label: tr(context, '全部', 'All'),
-                      selected: _category == null && !_freeOnly,
+                      selected: _categories.isEmpty && !_freeOnly,
                       onTap: () => setState(() {
-                        _category = null;
+                        _categories.clear();
                         _freeOnly = false;
                       }),
                     ),
                     for (final category in ItemCategory.values)
                       _FilterChip(
                         label: categoryLabel(context, category),
-                        selected: _category == category,
-                        onTap: () => setState(() => _category = category),
+                        selected: _categories.contains(category),
+                        onTap: () => setState(() {
+                          if (!_categories.add(category)) _categories.remove(category);
+                        }),
                       ),
                   ],
                 ),
@@ -154,11 +158,24 @@ class _ExplorePageState extends State<ExplorePage> {
                       selected: _mineOnly,
                       onTap: () => setState(() => _mineOnly = !_mineOnly),
                     ),
-                    for (final sort in ItemSort.values)
+                    for (final field in SortField.values)
                       _FilterChip(
-                        label: sortLabel(context, sort),
-                        selected: _sort == sort,
-                        onTap: () => setState(() => _sort = sort),
+                        label: sortFieldLabel(context, field),
+                        selected: _field == field,
+                        onTap: () => setState(() => _field = field),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final direction in SortDir.values)
+                      _FilterChip(
+                        label: sortDirLabel(context, direction),
+                        selected: _direction == direction,
+                        onTap: () => setState(() => _direction = direction),
                       ),
                   ],
                 ),

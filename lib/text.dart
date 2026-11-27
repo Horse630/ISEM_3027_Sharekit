@@ -31,6 +31,8 @@ String shown(BuildContext context, String message) {
     '找不到這個帳號。' => 'That account was not found.',
     '驗證碼不對。' => 'That code is wrong.',
     '請填顯示名稱。' => 'Enter a display name.',
+    '密碼至少 8 個字，而且要同時有英文字母和數字。' =>
+      'Use at least 8 characters, with both letters and numbers.',
     _ => message,
   };
 }
@@ -72,8 +74,12 @@ String depositLabel(BuildContext context, DepositStatus status) {
   return tr(context, status.label, status.en);
 }
 
-String sortLabel(BuildContext context, ItemSort sort) {
-  return tr(context, sort.label, sort.en);
+String sortFieldLabel(BuildContext context, SortField field) {
+  return tr(context, field.label, field.en);
+}
+
+String sortDirLabel(BuildContext context, SortDir dir) {
+  return tr(context, dir.label, dir.en);
 }
 
 String priceText(BuildContext context, ShareItem item) {

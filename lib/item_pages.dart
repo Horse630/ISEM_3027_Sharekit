@@ -494,6 +494,24 @@ class _BookPageState extends State<BookPage> {
       bookingId: booking.id,
     );
     if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr(dialogContext, '已送出預約', 'Booking sent')),
+        content: Text(tr(
+          dialogContext,
+          '預約申請已送出，請等候物主同意。',
+          'The booking request was sent. Wait for the owner to accept.',
+        )),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr(dialogContext, '知道了', 'OK')),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
     store.openTab(1);
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
@@ -903,6 +921,22 @@ class _ListItemPageState extends State<ListItemPage> {
       district: _district,
       handover: HandoverMethod.faceToFace,
     );
+    setState(() {
+      _name.clear();
+      _summary.clear();
+      _price.clear();
+      _deposit.clear();
+      _length.clear();
+      _width.clear();
+      _height.clear();
+      _address.clear();
+      _autofill = null;
+      _photo = null;
+      _error = null;
+      _condition = '良好';
+      _category = ItemCategory.tool;
+    });
+    _fillAddress();
     ShareKitScope.of(context).openTab(0);
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(

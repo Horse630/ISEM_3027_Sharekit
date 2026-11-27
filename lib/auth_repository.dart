@@ -338,9 +338,11 @@ class AuthRepository {
     }
     final trimmed = name.trim();
     final address = contact.trim();
+    final problem = passwordProblem(password);
     if (trimmed.isEmpty || password.isEmpty || address.isEmpty) {
       throw AuthFailure('請填名稱、密碼和電郵或電話。');
     }
+    if (problem != null) throw AuthFailure(problem);
     final db = _database;
     final existing = await db.query(
       'users',
@@ -455,8 +457,9 @@ class AuthRepository {
     required String currentPassword,
     required String nextPassword,
   }) async {
-    if (currentPassword.isEmpty || nextPassword.length < 4) {
-      throw AuthFailure('請填現有密碼，新密碼至少 4 個字。');
+    final problem = passwordProblem(nextPassword);
+    if (currentPassword.isEmpty || problem != null) {
+      throw AuthFailure(problem ?? '請填現有密碼。');
     }
     if (_useRemote) {
       await _loadRemoteUsers();
@@ -504,6 +507,29 @@ class AuthRepository {
       limit: 1,
     );
     return _userFrom(rows.first);
+  }
+
+  Future<Uint8List?> photoForName(String name) async {
+    final person = name.trim();
+    if (person.isEmpty) return null;
+    if (_useRemote) {
+      await _loadRemoteUsers();
+      for (final row in _remoteUsers.values) {
+        final login = (row['name'] as String?) ?? '';
+        final display = (row['display_name'] as String?) ?? '';
+        if (login == person || display == person) return _photoOf(row['photo']);
+      }
+      return null;
+    }
+    final rows = await _database.query(
+      'users',
+      columns: ['photo'],
+      where: 'name = ? OR display_name = ?',
+      whereArgs: [person, person],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _photoOf(rows.first['photo']);
   }
 
   Future<Uint8List?> hkidPreview(AppUser user) async {
@@ -771,9 +797,11 @@ class AuthRepository {
   }) async {
     final trimmed = name.trim();
     final address = contact.trim();
+    final problem = passwordProblem(password);
     if (trimmed.isEmpty || password.isEmpty || address.isEmpty) {
       throw AuthFailure('請填名稱、密碼和電郵或電話。');
     }
+    if (problem != null) throw AuthFailure(problem);
     await _loadRemoteUsers();
     if (_remoteUsers.containsKey(trimmed)) {
       throw AuthFailure('這個名稱已經有人用了。');
@@ -996,6 +1024,15 @@ class AuthRepository {
   String _code() {
     final value = Random().nextInt(900000) + 100000;
     return value.toString();
+  }
+
+  static String? passwordProblem(String password) {
+    final hasLetter = RegExp(r'[A-Za-z]').hasMatch(password);
+    final hasNumber = RegExp(r'[0-9]').hasMatch(password);
+    if (password.length < 8 || !hasLetter || !hasNumber) {
+      return '密碼至少 8 個字，而且要同時有英文字母和數字。';
+    }
+    return null;
   }
 
   static String _hash(String password) {

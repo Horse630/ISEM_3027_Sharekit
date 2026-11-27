@@ -78,19 +78,33 @@ class DistrictFilter {
   final HkDistrict? district;
 }
 
-enum ItemSort { nearest, rating, priceLow }
+enum SortField { nearest, rating, price }
 
-extension ItemSortX on ItemSort {
+enum SortDir { highToLow, lowToHigh }
+
+extension SortFieldX on SortField {
   String get label => switch (this) {
-    ItemSort.nearest => '最近',
-    ItemSort.rating => '評價',
-    ItemSort.priceLow => '租金',
+    SortField.nearest => '最近',
+    SortField.rating => '評價',
+    SortField.price => '租金',
   };
 
   String get en => switch (this) {
-    ItemSort.nearest => 'Nearest',
-    ItemSort.rating => 'Rating',
-    ItemSort.priceLow => 'Price',
+    SortField.nearest => 'Nearest',
+    SortField.rating => 'Reviews',
+    SortField.price => 'Price',
+  };
+}
+
+extension SortDirX on SortDir {
+  String get label => switch (this) {
+    SortDir.highToLow => '高至低',
+    SortDir.lowToHigh => '低至高',
+  };
+
+  String get en => switch (this) {
+    SortDir.highToLow => 'High to low',
+    SortDir.lowToHigh => 'Low to high',
   };
 }
 

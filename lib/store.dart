@@ -101,6 +101,11 @@ class ShareStore extends ChangeNotifier {
   }
 
   List<ShareItem> get items => List.unmodifiable(_items);
+
+  void replaceItems(List<ShareItem> items) {
+    _items = List<ShareItem>.of(items);
+    notifyListeners();
+  }
   List<Booking> get bookings => List.unmodifiable(_bookings.reversed);
 
   ShareItem itemById(String id) => _items.firstWhere((item) => item.id == id);
@@ -134,6 +139,20 @@ class ShareStore extends ChangeNotifier {
       ? booking.borrowerAccount == login
       : booking.borrower.isNotEmpty &&
             (booking.borrower == label || booking.borrower == login);
+
+  List<Booking> reviewsAbout(String name) {
+    final person = name.trim();
+    if (person.isEmpty) return const [];
+    return bookings.where((booking) {
+      final item = findItem(booking.itemId);
+      final aboutBorrower = (booking.borrower == person || booking.borrowerAccount == person) &&
+          (booking.ownerReviewComment ?? '').trim().isNotEmpty;
+      final aboutOwner = item != null &&
+          item.owner == person &&
+          (booking.comment ?? '').trim().isNotEmpty;
+      return aboutBorrower || aboutOwner;
+    }).toList();
+  }
 
   List<Booking> reviewsForBorrower(String label, String login) => bookings
       .where(
@@ -174,22 +193,17 @@ class ShareStore extends ChangeNotifier {
 
   List<ShareItem> search({
     required String query,
-    ItemCategory? category,
+    Set<ItemCategory> categories = const {},
     required bool freeOnly,
     HkDistrict? district,
     String? owner,
-    ItemSort sort = ItemSort.nearest,
+    SortField field = SortField.nearest,
+    SortDir direction = SortDir.lowToHigh,
   }) {
     final needle = query.trim().toLowerCase();
     final results = _items.where((item) {
-      final matchesQuery =
-          needle.isEmpty ||
-          item.name.toLowerCase().contains(needle) ||
-          item.summary.toLowerCase().contains(needle) ||
-          item.address.toLowerCase().contains(needle) ||
-          item.district.label.toLowerCase().contains(needle) ||
-          item.category.label.contains(query.trim());
-      final matchesCategory = category == null || item.category == category;
+      final matchesQuery = needle.isEmpty || _matchesSearch(item, needle);
+      final matchesCategory = categories.isEmpty || categories.contains(item.category);
       final matchesFree = !freeOnly || item.isFree;
       final matchesDistrict = district == null || item.district == district;
       final matchesOwner = owner == null || item.owner == owner;
@@ -199,17 +213,34 @@ class ShareStore extends ChangeNotifier {
           matchesDistrict &&
           matchesOwner;
     }).toList();
-    switch (sort) {
-      case ItemSort.nearest:
-        results.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
-      case ItemSort.rating:
-        results.sort((a, b) => b.rating.compareTo(a.rating));
-      case ItemSort.priceLow:
-        results.sort(
-          (a, b) => (a.dailyPrice ?? -1).compareTo(b.dailyPrice ?? -1),
-        );
+    int compare(ShareItem a, ShareItem b) {
+      final high = direction == SortDir.highToLow;
+      switch (field) {
+        case SortField.nearest:
+          final order = a.distanceMeters.compareTo(b.distanceMeters);
+          return high ? -order : order;
+        case SortField.rating:
+          final order = a.rating.compareTo(b.rating);
+          return high ? -order : order;
+        case SortField.price:
+          final order = (a.dailyPrice ?? 0).compareTo(b.dailyPrice ?? 0);
+          return high ? -order : order;
+      }
     }
+    results.sort(compare);
     return results;
+  }
+
+  bool _matchesSearch(ShareItem item, String needle) {
+    bool has(String value) => value.toLowerCase().contains(needle);
+    return has(item.name) ||
+        has(item.summary) ||
+        has(item.owner) ||
+        has(item.address) ||
+        has(item.district.label) ||
+        has(item.district.en) ||
+        has(item.category.label) ||
+        has(item.category.en);
   }
 
   void renameOwner(String from, String to, {String login = ''}) {

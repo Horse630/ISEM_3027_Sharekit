@@ -15,6 +15,10 @@ import 'store.dart';
 import 'text.dart';
 import 'widgets.dart';
 
+const supportServiceName = 'Customary service';
+
+String supportItemId(String login) => 'support-$login';
+
 class ChatPage extends StatefulWidget {
   const ChatPage({
     super.key,
@@ -62,13 +66,25 @@ class _ChatPageState extends State<ChatPage> {
     super.dispose();
   }
 
+  bool get _support => widget.ownerName == supportServiceName;
+
   Future<void> _load() async {
     final messages = await widget.auth.messagesFor(widget.itemId);
-    final mine = conversationOf(
-      messages: messages,
-      owner: widget.ownerName,
-      client: widget.clientName ?? widget.senderName,
-    );
+    if (_support && !messages.any((message) => message.sender == supportServiceName)) {
+      await widget.auth.sendMessage(
+        itemId: widget.itemId,
+        sender: supportServiceName,
+        body: 'Hello, this is Customary service. Please tell us your problem: what you were trying to do, and what went wrong. We will read your message and help.',
+      );
+      return _load();
+    }
+    final mine = _support
+        ? messages
+        : conversationOf(
+            messages: messages,
+            owner: widget.ownerName,
+            client: widget.clientName ?? widget.senderName,
+          );
     if (!mounted) return;
     setState(() {
       _messages = mine;
@@ -103,6 +119,13 @@ class _ChatPageState extends State<ChatPage> {
       body: body,
       photo: photo,
     );
+    if (_support && widget.senderName != supportServiceName) {
+      await widget.auth.sendMessage(
+        itemId: widget.itemId,
+        sender: supportServiceName,
+        body: 'We have received your message. Someone from Customary service will contact you soon.',
+      );
+    }
     await _load();
   }
 
@@ -110,7 +133,37 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(tr(context, '聯絡${widget.ownerName}', 'Message ${widget.ownerName}')),
+        title: Row(
+          children: [
+            PersonAvatar(
+              auth: widget.auth,
+              name: _support
+                  ? supportServiceName
+                  : (widget.senderName == widget.ownerName
+                      ? (widget.clientName ?? '')
+                      : widget.ownerName),
+              appIcon: _support,
+              onTap: _support
+                  ? null
+                  : () {
+                      final catalog = widget.store;
+                      if (catalog == null) return;
+                      final person = widget.senderName == widget.ownerName
+                          ? (widget.clientName ?? '')
+                          : widget.ownerName;
+                      showPersonReviews(context, catalog, person);
+                    },
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _support
+                    ? supportServiceName
+                    : tr(context, '聯絡${widget.ownerName}', 'Message ${widget.ownerName}'),
+              ),
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [
@@ -715,4 +768,94 @@ class _PriceOfferDialogState extends State<_PriceOfferDialog> {
       ],
     );
   }
+}
+
+class PersonAvatar extends StatelessWidget {
+  const PersonAvatar({
+    super.key,
+    required this.auth,
+    required this.name,
+    this.onTap,
+    this.appIcon = false,
+  });
+
+  final AuthRepository auth;
+  final String name;
+  final VoidCallback? onTap;
+  final bool appIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = appIcon
+        ? const AssetImage('assets/app_icon.png')
+        : null;
+    return GestureDetector(
+      onTap: appIcon || name.trim().isEmpty ? null : onTap,
+      child: FutureBuilder<Uint8List?>(
+        future: appIcon ? Future<Uint8List?>.value() : auth.photoForName(name),
+        builder: (context, snapshot) {
+          final photo = snapshot.data;
+          return CircleAvatar(
+            backgroundColor: const Color(0xFF003070).withValues(alpha: 0.12),
+            backgroundImage: image ?? (photo == null ? null : MemoryImage(photo)),
+            child: image == null && photo == null
+                ? const Icon(Icons.person_outline, color: Color(0xFF003070))
+                : null,
+          );
+        },
+      ),
+    );
+  }
+}
+
+void showPersonReviews(BuildContext context, ShareStore store, String name) {
+  final person = name.trim();
+  if (person.isEmpty) return;
+  final reviews = store.reviewsAbout(person);
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(tr(dialogContext, '$person 的評價', 'Reviews of $person')),
+      content: SizedBox(
+        width: 360,
+        child: reviews.isEmpty
+            ? Text(tr(dialogContext, '暫時沒有其他人給的評價。', 'No reviews from other people yet.'))
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final review in reviews)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(_reviewTitle(dialogContext, store, review, person)),
+                      subtitle: Text(_reviewBody(store, review, person)),
+                      isThreeLine: true,
+                    ),
+                ],
+              ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(tr(dialogContext, '關閉', 'Close')),
+        ),
+      ],
+    ),
+  );
+}
+
+String _reviewTitle(BuildContext context, ShareStore store, Booking review, String person) {
+  final item = store.findItem(review.itemId);
+  final aboutOwner = item != null && item.owner == person;
+  final author = aboutOwner
+      ? (review.borrower.isEmpty ? tr(context, '借用者', 'Borrower') : review.borrower)
+      : (review.ownerReviewAuthor ?? item?.owner ?? tr(context, '物主', 'Owner'));
+  final stars = aboutOwner ? (review.stars ?? 0) : (review.ownerReviewStars ?? 0);
+  return '${'★' * stars}  $author';
+}
+
+String _reviewBody(ShareStore store, Booking review, String person) {
+  final itemName = store.findItem(review.itemId)?.name ?? review.itemId;
+  final aboutBorrower = review.borrower == person || review.borrowerAccount == person;
+  final text = aboutBorrower ? (review.ownerReviewComment ?? '') : (review.comment ?? '');
+  return '$itemName\n$text';
 }

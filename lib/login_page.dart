@@ -51,6 +51,13 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = tr(context, '請填電郵或電話。', 'Enter an email or phone number.'));
       return;
     }
+    if (_registering) {
+      final problem = AuthRepository.passwordProblem(password);
+      if (problem != null) {
+        setState(() => _error = shown(context, problem));
+        return;
+      }
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -213,6 +220,9 @@ class _LoginPageState extends State<LoginPage> {
           onSubmitted: (_) => _submit(),
           decoration: InputDecoration(
             labelText: tr(context, '密碼', 'Password'),
+            helperText: _registering
+                ? tr(context, '至少 8 個字，要有英文字母和數字。', 'At least 8 characters, with letters and numbers.')
+                : null,
             fillColor: const Color(0xFFF4F1EB),
           ),
         ),

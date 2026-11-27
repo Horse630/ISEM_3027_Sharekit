@@ -90,6 +90,17 @@ class ChatsPage extends StatelessWidget {
     }
     final threads = <_Thread>[];
     for (final entry in grouped.entries) {
+      if (entry.key == supportItemId(user.name) || entry.key == supportItemId(user.label)) {
+        threads.add(_Thread(
+          itemId: entry.key,
+          client: user.label,
+          asOwner: false,
+          support: true,
+          messages: entry.value,
+          unread: center.unreadForThread(entry.key, user.label, entry.value),
+        ));
+        continue;
+      }
       final owner = store.findItem(entry.key)?.owner ?? '';
       final iAmOwner = owner == user.label || owner == user.name;
       final clients = <String>{
@@ -131,6 +142,7 @@ class _Thread {
     required this.itemId,
     required this.client,
     required this.asOwner,
+    this.support = false,
     required this.messages,
     required this.unread,
   });
@@ -138,6 +150,7 @@ class _Thread {
   final String itemId;
   final String client;
   final bool asOwner;
+  final bool support;
   final List<ChatMessage> messages;
   final int unread;
 
@@ -163,9 +176,11 @@ class _ThreadTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final item = store.findItem(thread.itemId);
     final owner = item?.owner ?? '';
-    final title = thread.asOwner
-        ? thread.client
-        : (item?.name ?? tr(context, '已下架的物品', 'Removed item'));
+    final title = thread.support
+        ? supportServiceName
+        : thread.asOwner
+            ? thread.client
+            : (item?.name ?? tr(context, '已下架的物品', 'Removed item'));
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
@@ -184,7 +199,7 @@ class _ThreadTile extends StatelessWidget {
                 auth: auth,
                 itemId: thread.itemId,
                 itemName: item?.name ?? title,
-                ownerName: owner,
+                ownerName: thread.support ? supportServiceName : owner,
                 senderName: user.label,
                 clientName: thread.client,
                 center: center,
@@ -198,12 +213,17 @@ class _ThreadTile extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              CircleAvatar(
-                backgroundColor: const Color(0xFF003070).withValues(alpha: 0.12),
-                child: const Icon(
-                  Icons.chat_bubble_outline,
-                  color: Color(0xFF003070),
-                ),
+              PersonAvatar(
+                auth: auth,
+                name: thread.support ? supportServiceName : (thread.asOwner ? thread.client : owner),
+                appIcon: thread.support,
+                onTap: thread.support
+                    ? null
+                    : () => showPersonReviews(
+                          context,
+                          store,
+                          thread.asOwner ? thread.client : owner,
+                        ),
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -282,9 +282,12 @@ class _HomeShellState extends State<HomeShell> {
     if (!mounted) return;
     final user = widget.user;
     final names = {user.label, user.name}.where((value) => value.trim().isNotEmpty).toSet();
+    Booking? reserved;
     Booking? pickup;
     var pickupAsOwner = false;
+    Booking? returnedNotice;
     Booking? deposit;
+    Booking? reviewed;
     for (final booking in widget.store.bookings) {
       final item = widget.store.findItem(booking.itemId);
       final isOwner = item != null && names.contains(item.owner);
@@ -295,25 +298,54 @@ class _HomeShellState extends State<HomeShell> {
       }
       final previous = _stages[booking.id];
       final changed = _stagesReady && previous != null && previous != booking.stage;
+      if (changed && booking.stage == BookingStage.reserved) {
+        reserved = booking;
+      }
       if (changed &&
           booking.stage == BookingStage.pickedUp &&
           _toldPickup.add(booking.id)) {
         pickup = booking;
         pickupAsOwner = isOwner && !isBorrower;
       }
+      if (changed && booking.stage == BookingStage.returned) {
+        returnedNotice = booking;
+      }
       if (changed &&
-          (booking.stage == BookingStage.returned ||
-              booking.stage == BookingStage.reviewed) &&
+          booking.stage == BookingStage.returned &&
           isBorrower &&
           (booking.depositAmount > 0 || booking.deposit == DepositStatus.paid) &&
           _toldDeposit.add(booking.id)) {
         deposit = booking;
+      }
+      if (changed && booking.stage == BookingStage.reviewed) {
+        reviewed = booking;
       }
       _stages[booking.id] = booking.stage;
     }
     if (!_stagesReady) {
       _stagesReady = true;
       return;
+    }
+    if (reserved != null) {
+      final itemName = widget.store.findItem(reserved.itemId)?.name ?? '';
+      _popup(
+        tr(context, '預約已同意', 'Booking accepted'),
+        tr(context, '「$itemName」的預約已同意。', 'The booking for “$itemName” was accepted.'),
+      );
+    }
+    if (returnedNotice != null) {
+      final itemName = widget.store.findItem(returnedNotice.itemId)?.name ?? '';
+      _popup(
+        tr(context, '已歸還', 'Returned'),
+        tr(context, '「$itemName」已確認歸還。', '“$itemName” has been returned.'),
+      );
+    }
+    if (reviewed != null) {
+      final itemName = widget.store.findItem(reviewed.itemId)?.name ?? '';
+      _popup(
+        tr(context, '評價已完成', 'Review finished'),
+        tr(context, '「$itemName」的評價步驟已完成。', 'The review step for “$itemName” is done.'),
+      );
     }
     if (pickup != null) {
       final itemName = widget.store.findItem(pickup.itemId)?.name ?? '';
@@ -366,6 +398,25 @@ class _HomeShellState extends State<HomeShell> {
         );
       });
     }
+  }
+
+  void _popup(String title, String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(tr(dialogContext, '知道了', 'OK')),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   @override
