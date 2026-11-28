@@ -633,14 +633,55 @@ List<ChatMessage> conversationOf({
   required String owner,
   required String client,
 }) {
-  final sorted = [...messages]..sort((a, b) => a.id.compareTo(b.id));
+  final sorted = [...messages]..sort((a, b) {
+    final byTime = a.createdAt.compareTo(b.createdAt);
+    if (byTime != 0) return byTime;
+    return a.id.compareTo(b.id);
+  });
   String? current;
   final kept = <ChatMessage>[];
   for (final message in sorted) {
     if (message.sender != owner) current = message.sender;
     if (current == client) kept.add(message);
   }
-  return kept;
+  return _placeBookingAfterDecision(kept);
+}
+
+/// Offer, then the owner's agree or decline, then the booking request.
+List<ChatMessage> _placeBookingAfterDecision(List<ChatMessage> messages) {
+  final decided = <String>{};
+  for (final message in messages) {
+    if ((message.kind == 'offer-book' || message.kind == 'offer-no') &&
+        message.bookingId.isNotEmpty) {
+      decided.add(message.bookingId);
+    }
+  }
+  final result = <ChatMessage>[];
+  final waiting = <ChatMessage>[];
+  final open = <String>{};
+  for (final message in messages) {
+    if (message.kind == 'offer') {
+      if (decided.contains(message.id.toString())) open.add(message.id.toString());
+      result.add(message);
+      continue;
+    }
+    if (message.kind == 'offer-book' || message.kind == 'offer-no') {
+      open.remove(message.bookingId);
+      result.add(message);
+      if (open.isEmpty && waiting.isNotEmpty) {
+        result.addAll(waiting);
+        waiting.clear();
+      }
+      continue;
+    }
+    if (message.kind == 'request' && open.isNotEmpty) {
+      waiting.add(message);
+      continue;
+    }
+    result.add(message);
+  }
+  result.addAll(waiting);
+  return result;
 }
 
 (double?, double)? _readOffer(String body) {

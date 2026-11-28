@@ -292,6 +292,10 @@ class _HomeShellState extends State<HomeShell> {
       final changed = _stagesReady && previous != null && previous != booking.stage;
       final itemName = item?.name ?? '';
       final party = isBorrower || isOwner;
+      if (booking.stage == BookingStage.reviewed) {
+        _stages[booking.id] = booking.stage;
+        continue;
+      }
       if (changed && isBorrower && !isOwner) {
         if (booking.stage == BookingStage.reserved && _toldPickup.add('reserved-${booking.id}')) {
           notices.add((
