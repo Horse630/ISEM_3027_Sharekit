@@ -15,6 +15,7 @@ import 'opening_page.dart';
 import 'models.dart';
 import 'store.dart';
 import 'text.dart';
+import 'widgets.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -242,7 +243,6 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   final Map<String, BookingStage> _stages = {};
-  final Map<String, (bool, bool)> _reviewNotes = {};
   final Set<String> _toldPickup = {};
   final Set<String> _toldDeposit = {};
   var _stagesReady = false;
@@ -283,7 +283,7 @@ class _HomeShellState extends State<HomeShell> {
     if (!mounted) return;
     final user = widget.user;
     final names = {user.label, user.name}.where((value) => value.trim().isNotEmpty).toSet();
-    final notices = <(String, String)>[];
+    final notices = <(String, String, BookingStage?)>[];
     for (final booking in widget.store.bookings) {
       final item = widget.store.findItem(booking.itemId);
       final isOwner = item != null && names.contains(item.owner);
@@ -291,22 +291,22 @@ class _HomeShellState extends State<HomeShell> {
       final previous = _stages[booking.id];
       final changed = _stagesReady && previous != null && previous != booking.stage;
       final itemName = item?.name ?? '';
-      final hadBorrowerReview = _reviewNotes[booking.id]?.$1 ?? false;
-      final hadOwnerReview = _reviewNotes[booking.id]?.$2 ?? false;
-      final hasBorrowerReview = (booking.comment ?? '').trim().isNotEmpty;
-      final hasOwnerReview = (booking.ownerReviewComment ?? '').trim().isNotEmpty;
-      // The person who just did the step already knows. Only the other person is told.
+      final party = isBorrower || isOwner;
       if (changed && isBorrower && !isOwner) {
         if (booking.stage == BookingStage.reserved && _toldPickup.add('reserved-${booking.id}')) {
           notices.add((
             tr(context, '預約已同意', 'Booking accepted'),
             tr(context, '「$itemName」的預約已同意。', 'The booking for “$itemName” was accepted.'),
+            null,
           ));
         }
+      }
+      if (changed && party) {
         if (booking.stage == BookingStage.pickedUp && _toldPickup.add('pickup-${booking.id}')) {
           notices.add((
             tr(context, '已取件', 'Picked up'),
-            tr(context, '「$itemName」已取件。歸還時請向物主出示歸還碼。', '“$itemName” has been picked up. Show the return code when you bring it back.'),
+            tr(context, '「$itemName」已取件。目前進度是使用中。', '“$itemName” has been picked up. Status is now in use.'),
+            booking.stage,
           ));
         }
         if (booking.stage == BookingStage.returned && _toldDeposit.add(booking.id)) {
@@ -316,43 +316,48 @@ class _HomeShellState extends State<HomeShell> {
                 ? tr(context, '按金將退回', 'Deposit will be returned')
                 : tr(context, '已歸還', 'Returned'),
             hasDeposit
-                ? tr(context, '「$itemName」已歸還。按金將於 3 日內退回。', '“$itemName” is returned. The deposit will be returned within 3 days.')
-                : tr(context, '「$itemName」已確認歸還。', '“$itemName” has been returned.'),
+                ? tr(context, '「$itemName」已歸還。按金將於 3 日內退回。目前進度是已歸還。', '“$itemName” is returned. The deposit will be returned within 3 days. Status is now returned.')
+                : tr(context, '「$itemName」已確認歸還。目前進度是已歸還。', '“$itemName” has been returned. Status is now returned.'),
+            booking.stage,
           ));
         }
       }
-      if (_stagesReady && isOwner && !isBorrower && !hadBorrowerReview && hasBorrowerReview && _toldPickup.add('review-owner-${booking.id}')) {
-        notices.add((
-          tr(context, '評價已完成', 'Review finished'),
-          tr(context, '「$itemName」的評價步驟已完成。', 'The review step for “$itemName” is done.'),
-        ));
-      }
-      if (_stagesReady && isBorrower && !isOwner && !hadOwnerReview && hasOwnerReview && _toldPickup.add('review-borrower-${booking.id}')) {
-        notices.add((
-          tr(context, '評價已完成', 'Review finished'),
-          tr(context, '「$itemName」的評價步驟已完成。', 'The review step for “$itemName” is done.'),
-        ));
-      }
       _stages[booking.id] = booking.stage;
-      _reviewNotes[booking.id] = (hasBorrowerReview, hasOwnerReview);
     }
     if (!_stagesReady) {
       _stagesReady = true;
       return;
     }
     for (final notice in notices) {
-      _popup(notice.$1, notice.$2);
+      _popup(notice.$1, notice.$2, notice.$3);
     }
   }
 
-  void _popup(String title, String message) {
+  void _popup(String title, String message, BookingStage? stage) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(title),
-          content: Text(message),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(message),
+              if (stage != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  tr(dialogContext, '目前進度', 'Current status'),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(stageLabel(dialogContext, stage)),
+                const SizedBox(height: 12),
+                StageTrack(stage: stage),
+              ],
+            ],
+          ),
           actions: [
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
